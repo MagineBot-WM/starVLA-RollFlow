@@ -36,7 +36,6 @@ class SinusoidalPositionalEncoding(nn.Module):
         # We'll compute sin/cos frequencies across dim T
         timesteps = timesteps.float()  # ensure float
 
-        B, T = timesteps.shape
         device = timesteps.device
 
         half_dim = self.embedding_dim // 2
@@ -57,12 +56,15 @@ class SinusoidalPositionalEncoding(nn.Module):
 class ActionEncoder(nn.Module):
     def __init__(self, action_dim, hidden_size):
         super().__init__()
+        if hidden_size % 2:
+            raise ValueError("hidden_size must be even for sinusoidal time encoding")
         self.hidden_size = hidden_size
+        self.action_dim = action_dim
 
-        # W1: R^{w x d}, W2: R^{w x 2w}, W3: R^{w x w}
-        self.W1 = nn.Linear(action_dim, hidden_size)  # (d -> w)
-        self.W2 = nn.Linear(2 * hidden_size, hidden_size)  # (2w -> w)
-        self.W3 = nn.Linear(hidden_size, hidden_size)  # (w -> w)
+        # Match the standard GR00T action-encoder parameter layout.
+        self.layer1 = nn.Linear(action_dim, hidden_size)  # (d -> w)
+        self.layer2 = nn.Linear(2 * hidden_size, hidden_size)  # (2w -> w)
+        self.layer3 = nn.Linear(hidden_size, hidden_size)  # (w -> w)
 
         self.pos_encoding = SinusoidalPositionalEncoding(hidden_size)
 
@@ -81,8 +83,8 @@ class ActionEncoder(nn.Module):
         if timesteps.shape != (B, T):
             raise ValueError(f"timesteps must have shape [B] or [B,T], got {tuple(timesteps.shape)}")
 
-        a_emb = self.W1(actions)
+        a_emb = self.layer1(actions)
         tau_emb = self.pos_encoding(timesteps).to(dtype=a_emb.dtype)
         x = torch.cat([a_emb, tau_emb], dim=-1)
-        x = swish(self.W2(x))
-        return self.W3(x)
+        x = swish(self.layer2(x))
+        return self.layer3(x)

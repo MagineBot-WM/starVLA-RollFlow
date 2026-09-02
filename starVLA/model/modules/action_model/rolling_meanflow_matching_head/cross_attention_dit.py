@@ -86,7 +86,9 @@ class BasicTransformerBlock(nn.Module):
         attention_bias: bool = False,
         upcast_attention: bool = False,
         norm_elementwise_affine: bool = True,
-        norm_type: str = "layer_norm",  # 'layer_norm', 'ada_norm', 'ada_norm_zero', 'ada_norm_single', 'ada_norm_continuous', 'layer_norm_i2vgen'
+        # 'layer_norm', 'ada_norm', 'ada_norm_zero', 'ada_norm_single',
+        # 'ada_norm_continuous', 'layer_norm_i2vgen'
+        norm_type: str = "layer_norm",
         norm_eps: float = 1e-5,
         final_dropout: bool = False,
         attention_type: str = "default",
@@ -195,8 +197,8 @@ class BasicTransformerBlock(nn.Module):
 class DiT(ModelMixin, ConfigMixin):
     _supports_gradient_checkpointing = True
 
-    # register_to_config auto-registers constructor params into config, enabling access via self.config.xxx instead of self.xxx
-    @register_to_config  # Registers passed params to config. TODO: replace with our singleton pattern, implement a mergeable @merge_param_config
+    # register_to_config exposes constructor parameters through self.config.
+    @register_to_config
     def __init__(
         self,
         num_attention_heads: int = 8,
@@ -281,6 +283,32 @@ class DiT(ModelMixin, ConfigMixin):
             sum(p.numel() for p in self.parameters() if p.requires_grad),
         )
 
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        """Warm-start the new interval encoder from a legacy time encoder."""
+        for name in self.interval_timestep_encoder.state_dict():
+            interval_key = f"{prefix}interval_timestep_encoder.{name}"
+            endpoint_key = f"{prefix}timestep_encoder.{name}"
+            if interval_key not in state_dict and endpoint_key in state_dict:
+                state_dict[interval_key] = state_dict[endpoint_key]
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,  # Shape: (B, T, D)
@@ -293,6 +321,13 @@ class DiT(ModelMixin, ConfigMixin):
     ):
         if timestep is None:
             raise ValueError("timestep is required")
+        if self.transformer_blocks and self.transformer_blocks[0].pos_embed is not None:
+            max_positions = self.config.max_num_positional_embeddings
+            if hidden_states.shape[1] > max_positions:
+                raise ValueError(
+                    f"sequence length {hidden_states.shape[1]} exceeds "
+                    f"max_num_positional_embeddings={max_positions}"
+                )
 
         # Legacy callers with one time input retain the original conditioning.
         # RollFlow callers add a separately learned embedding of (t - r).
@@ -300,16 +335,18 @@ class DiT(ModelMixin, ConfigMixin):
         if start_timestep is not None:
             if start_timestep.shape != timestep.shape:
                 raise ValueError("start_timestep and timestep must have identical shapes")
-            if bool((start_timestep > timestep).any()):
-                raise ValueError("require start_timestep <= timestep")
             temb = temb + self.interval_timestep_encoder(timestep - start_timestep)
 
         expected_prefix = hidden_states.shape[:2]
+        if temb.ndim == 2 and temb.shape[0] != expected_prefix[0]:
+            raise ValueError("batch timesteps must match hidden_states batch size")
         if temb.ndim == 3 and temb.shape[:2] != expected_prefix:
             raise ValueError(
                 "token-wise timesteps must match hidden_states [B,T]: "
                 f"got {tuple(temb.shape[:2])} and {tuple(expected_prefix)}"
             )
+        if temb.ndim not in (2, 3):
+            raise ValueError(f"timestep must have shape [B] or [B,T], got {tuple(timestep.shape)}")
 
         # Process through transformer blocks - single pass through the blocks
         hidden_states = hidden_states.contiguous()
@@ -324,24 +361,33 @@ class DiT(ModelMixin, ConfigMixin):
 
         # Process through transformer blocks
         for idx, block in enumerate(self.transformer_blocks):
-            if idx % 2 == 1 and self._interleave_self_attention:
-                hidden_states = block(
-                    hidden_states,
-                    attention_mask=None,
-                    encoder_hidden_states=None,
-                    encoder_attention_mask=None,
-                    temb=temb,
-                )
+            use_self_attention = idx % 2 == 1 and self._interleave_self_attention
+            if use_self_attention:
+                block_encoder_hidden_states = None
+                block_encoder_attention_mask = None
             else:
                 if is_layerwise_encoder:
                     block_encoder_hidden_states = encoder_hidden_states[idx]
                 else:
                     block_encoder_hidden_states = encoder_hidden_states
+
+                block_encoder_attention_mask = encoder_attention_mask
+
+            if self.training and self.gradient_checkpointing:
+                hidden_states = self._gradient_checkpointing_func(
+                    block,
+                    hidden_states,
+                    None,
+                    block_encoder_hidden_states,
+                    block_encoder_attention_mask,
+                    temb,
+                )
+            else:
                 hidden_states = block(
                     hidden_states,
                     attention_mask=None,
                     encoder_hidden_states=block_encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
+                    encoder_attention_mask=block_encoder_attention_mask,
                     temb=temb,
                 )
             all_hidden_states.append(hidden_states)
@@ -421,8 +467,11 @@ class SelfAttentionTransformer(ModelMixin, ConfigMixin):
         all_hidden_states = [hidden_states]
 
         # Process through transformer blocks
-        for idx, block in enumerate(self.transformer_blocks):
-            hidden_states = block(hidden_states)
+        for block in self.transformer_blocks:
+            if self.training and self.gradient_checkpointing:
+                hidden_states = self._gradient_checkpointing_func(block, hidden_states)
+            else:
+                hidden_states = block(hidden_states)
             all_hidden_states.append(hidden_states)
 
         if return_all_hidden_states:

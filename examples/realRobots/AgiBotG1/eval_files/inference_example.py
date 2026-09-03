@@ -23,7 +23,7 @@ def capture_state() -> dict[str, np.ndarray]:
 
 
 def send_targets(targets: dict[str, np.ndarray]) -> None:
-    raise NotImplementedError("send one 20-D absolute target through the AgiBot SDK")
+    raise NotImplementedError("send one 22-D body/gripper/base target through the AgiBot SDK")
 
 
 def main() -> None:

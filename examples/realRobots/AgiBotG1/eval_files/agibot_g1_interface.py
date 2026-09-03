@@ -9,7 +9,7 @@ import numpy as np
 
 CAMERA_ORDER = ("head", "hand_left", "hand_right")
 STATE_DIMS = {"arms": 14, "waist": 2, "head": 2, "grippers": 2}
-ACTION_DIMS = dict(STATE_DIMS)
+ACTION_DIMS = {**STATE_DIMS, "base_velocity": 2}
 
 
 @dataclass(frozen=True)

@@ -9,7 +9,14 @@ from pathlib import Path
 
 import numpy as np
 import pyarrow.parquet as pq
-from agibot_g1_catalog import ACTION_DIMS, CANONICAL_FIELDS, PUBLIC_TASKS, REAL_TASKS, STATE_DIMS
+from agibot_g1_catalog import (
+    ACTION_DIMS,
+    CANONICAL_ACTION_FIELDS,
+    CANONICAL_STATE_FIELDS,
+    PUBLIC_TASKS,
+    REAL_TASKS,
+    STATE_DIMS,
+)
 
 DEFAULT_DATASETS_ROOT = Path("/data/tzq/datasets/starVLA/Datasets")
 
@@ -32,16 +39,25 @@ def _sample_contract(dataset: Path, family: str) -> dict:
         errors.append(f"state dim is {state.shape[1]}, expected 20")
     if action.shape[1] != expected_raw_action:
         errors.append(f"raw action dim is {action.shape[1]}, expected {expected_raw_action}")
-    for key in CANONICAL_FIELDS:
-        if key not in modality["state"] or key not in modality["action"]:
-            errors.append(f"missing canonical field {key}")
-    if sum(STATE_DIMS.values()) != 20 or sum(ACTION_DIMS.values()) != 20:
+    for key in CANONICAL_STATE_FIELDS:
+        if key not in modality["state"]:
+            errors.append(f"missing canonical state field {key}")
+    for key in CANONICAL_ACTION_FIELDS:
+        if key not in modality["action"]:
+            errors.append(f"missing canonical action field {key}")
+    if sum(STATE_DIMS.values()) != 20 or sum(ACTION_DIMS.values()) != 22:
         errors.append("canonical dimension table is invalid")
 
     gs = modality["state"]["grippers"]
     ga = modality["action"]["grippers"]
     measured = state[:, gs["start"] : gs["end"]]
     command = action[:, ga["start"] : ga["end"]]
+    base_meta = modality["action"].get("base_velocity") or modality["action"].get("base")
+    stats_payload = json.loads((dataset / "meta/stats_gr00t.json").read_text())
+    raw_stats = stats_payload.get("statistics", stats_payload)[base_meta["original_key"]]
+    base_slice = slice(base_meta["start"], base_meta["end"])
+    base_min = np.asarray(raw_stats["min"], dtype=np.float32)[base_slice]
+    base_max = np.asarray(raw_stats["max"], dtype=np.float32)[base_slice]
     correlations = []
     lag = min(16, max(1, len(state) // 20))
     for index in range(2):
@@ -61,10 +77,14 @@ def _sample_contract(dataset: Path, family: str) -> dict:
         "frames": info.get("total_frames"),
         "raw_state_dim": int(state.shape[1]),
         "raw_action_dim": int(action.shape[1]),
-        "model_action_dim": 20,
+        "model_action_dim": 22,
         "gripper_command_range": [float(command.min()), float(command.max())],
         "gripper_state_range_mm": [float(measured.min()), float(measured.max())],
         "gripper_future_correlations": correlations,
+        "base_velocity_range": [
+            base_min.tolist(),
+            base_max.tolist(),
+        ],
         "camera_shapes": camera_shapes,
         "errors": errors,
     }
@@ -72,15 +92,13 @@ def _sample_contract(dataset: Path, family: str) -> dict:
 
 def audit(datasets_root: Path) -> dict:
     collection = datasets_root / "AgiBot-G1-G2-StarVLA"
-    public_root = collection / "g1"
-    real_root = datasets_root / "my_real_g1_dataset-StarVLA"
-    rows = []
-    for legacy in PUBLIC_TASKS:
-        rows.append(_sample_contract(public_root / legacy, "public"))
-    for legacy in REAL_TASKS:
-        rows.append(_sample_contract(real_root / legacy, "real"))
-
     canonical_root = collection / "g1/manipulation"
+    rows = []
+    for canonical_name in PUBLIC_TASKS.values():
+        rows.append(_sample_contract(canonical_root / canonical_name, "public"))
+    for canonical_name in REAL_TASKS.values():
+        rows.append(_sample_contract(canonical_root / canonical_name, "real"))
+
     expected_names = sorted([*PUBLIC_TASKS.values(), *REAL_TASKS.values()])
     missing = [name for name in expected_names if not (canonical_root / name).is_dir()]
     return {
@@ -93,7 +111,7 @@ def audit(datasets_root: Path) -> dict:
             "missing_canonical_overlays": missing,
         },
         "inconsistencies": {
-            "raw_action": "public=22D with base velocity; real=20D fixed base",
+            "raw_action": "public flat action=22D; real flat action=20D, but both expose action.robot_velocity2",
             "raw_state_order": "public=arms,grippers,head,waist; real=arms,waist,head,grippers",
             "gripper_state": "both measured in mm, but hardware opening ranges differ",
             "gripper_action": "both continuous normalized opening: 0=closed, 1=open",
@@ -101,8 +119,8 @@ def audit(datasets_root: Path) -> dict:
         },
         "canonical_contract": {
             "state": "arms14 + waist2 + head2 + measured_grippers2",
-            "action": "arms14 + waist2 + head2 + normalized_opening2",
-            "excluded": "public mobile base velocity2",
+            "action": "arms14 + waist2 + head2 + normalized_opening2 + base_velocity2",
+            "base_velocity": "linear_x(m/s) + angular_z(rad/s)",
         },
         "datasets": rows,
     }

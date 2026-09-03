@@ -21,7 +21,7 @@ def _load(name, relative_path):
     return module
 
 
-def test_agibot_g1_data_contract_and_balanced_mixture():
+def test_agibot_g1_data_contract_and_local_logical_task_weight():
     module = _load(
         "agibot_g1_data_config_test",
         "examples/realRobots/AgiBotG1/train_files/data_registry/data_config.py",
@@ -30,14 +30,16 @@ def test_agibot_g1_data_contract_and_balanced_mixture():
 
     assert config.embodiment_tag is EmbodimentTag.AGIBOT_G1
     assert sum(config.state_key_dims.values()) == 20
-    assert sum(config.action_key_dims.values()) == 20
+    assert sum(config.action_key_dims.values()) == 22
+    assert config.action_keys[-1] == "action.base_velocity"
     assert config.action_indices == list(range(32))
     assert config.video_keys == ["video.head", "video.hand_left", "video.hand_right"]
 
     mixture = module.DATASET_NAMED_MIXTURES["agibot_g1_all"]
-    public_weight = sum(weight for name, weight, _ in mixture if "pick_" not in name or "place_pink" not in name)
+    public_weight = sum(weight for name, weight, _ in mixture if "place_pink_plate" not in name)
     real_weight = sum(weight for name, weight, _ in mixture if "place_pink_plate" in name)
-    assert public_weight == real_weight == 3.0
+    assert public_weight == 16.0
+    assert real_weight == 1.0
 
 
 def test_agibot_g1_has_stable_embedding_id():
@@ -64,6 +66,7 @@ def test_agibot_g1_eval_contract_and_gripper_calibration():
         "waist": np.zeros((1, 8, 2)),
         "head": np.zeros((1, 8, 2)),
         "grippers": np.broadcast_to([[-0.2, 1.2]], (1, 8, 2)),
+        "base_velocity": np.zeros((1, 8, 2)),
     }
     targets = module.actions_to_robot_targets(
         actions,
@@ -71,3 +74,4 @@ def test_agibot_g1_eval_contract_and_gripper_calibration():
     )
     np.testing.assert_allclose(targets["grippers_mm"][0], [5, 110])
     assert targets["arms"].shape == (8, 14)
+    assert targets["base_velocity"].shape == (8, 2)

@@ -25,6 +25,7 @@ REAL_TASKS = {
     "AgiBot-g1_pick_yellow_pepper_and_place_plate": "pick_yellow_pepper_place_pink_plate",
 }
 
-CANONICAL_FIELDS = ["arms", "waist", "head", "grippers"]
+CANONICAL_STATE_FIELDS = ["arms", "waist", "head", "grippers"]
+CANONICAL_ACTION_FIELDS = [*CANONICAL_STATE_FIELDS, "base_velocity"]
 STATE_DIMS = {"arms": 14, "waist": 2, "head": 2, "grippers": 2}
-ACTION_DIMS = dict(STATE_DIMS)
+ACTION_DIMS = {**STATE_DIMS, "base_velocity": 2}

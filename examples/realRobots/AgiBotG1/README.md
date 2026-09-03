@@ -7,14 +7,21 @@ pick/place tasks under one explicit fixed-base control contract.
 
 - Images, in order: `head`, `hand_left`, `hand_right`.
 - State (20D): `arms14 + waist2 + head2 + measured_grippers2`.
-- Action (20D): `arms14 + waist2 + head2 + normalized_opening2`.
+- Action (22D): `arms14 + waist2 + head2 + normalized_opening2 + base_velocity2`.
+- Base velocity order: `linear_x` in m/s, then `angular_z` in rad/s.
 - Gripper action is continuous: `0=closed`, `1=open`. It is not a binary label.
-- The public dataset's final 2D mobile-base velocity is intentionally excluded.
+- Local real episodes currently have zero base velocity. The public family has
+  only 35 isolated non-zero records across `task_357` and `task_424`, which is
+  insufficient movement supervision and may be telemetry noise. Future mobile
+  data can reuse the same field without changing the model shape.
 - The two physical gripper variants keep separate millimetre calibrations at deployment.
 
-The raw datasets differ in vector order and camera names. Their `modality.json`
-files perform semantic selection/reordering before concatenation, so raw flat
-vectors must never be concatenated directly.
+The three local object variants are treated as one logical pick/place task:
+each has weight `1/3`, while every public task has weight `1`. The resulting
+default mixture is approximately 94.1% public and 5.9% local. The raw datasets
+differ in vector order and camera names. Their `modality.json` files perform
+semantic selection/reordering before concatenation, so raw flat vectors must
+never be concatenated directly.
 
 ## Prepare and audit
 

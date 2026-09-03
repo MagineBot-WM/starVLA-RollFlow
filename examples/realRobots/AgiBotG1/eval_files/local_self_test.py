@@ -21,6 +21,7 @@ def main() -> None:
         "waist": np.zeros((1, 8, 2)),
         "head": np.zeros((1, 8, 2)),
         "grippers": np.broadcast_to(np.array([0.0, 1.0]), (1, 8, 2)),
+        "base_velocity": np.zeros((1, 8, 2)),
     }
     targets = actions_to_robot_targets(
         action,
@@ -28,6 +29,7 @@ def main() -> None:
     )
     np.testing.assert_allclose(targets["grippers_mm"][0], [2.0, 105.0])
     assert targets["arms"].shape == (8, 14)
+    assert targets["base_velocity"].shape == (8, 2)
     print("AgiBot G1 local contract self-test passed")
 
 

@@ -17,7 +17,7 @@ from starVLA.dataloader.gr00t_lerobot.transform.state_action import (
 
 
 class AgiBotG1DataConfig:
-    """Canonical 20-D absolute joint target contract for fixed-base G1."""
+    """Canonical G1 contract with 20-D body state and 22-D action."""
 
     embodiment_tag = EmbodimentTag.AGIBOT_G1
 
@@ -34,6 +34,7 @@ class AgiBotG1DataConfig:
         "action.waist",
         "action.head",
         "action.grippers",
+        "action.base_velocity",
     ]
     language_keys: ClassVar[list[str]] = ["annotation.human.action.task_description"]
 
@@ -48,6 +49,7 @@ class AgiBotG1DataConfig:
         "action.waist": 2,
         "action.head": 2,
         "action.grippers": 2,
+        "action.base_velocity": 2,
     }
 
     observation_indices: ClassVar[list[int]] = [0]
@@ -116,7 +118,8 @@ def _entries(names, weight):
 DATASET_NAMED_MIXTURES = {
     "agibot_g1_public": _entries(_PUBLIC_TASKS, 1.0),
     "agibot_g1_real": _entries(_REAL_TASKS, 1.0),
-    # Family-balanced: 16 public tasks sum to 3.0 and three local tasks sum
-    # to 3.0. Keep balance_dataset_weights=false in the YAML.
-    "agibot_g1_all": _entries(_PUBLIC_TASKS, 3.0 / len(_PUBLIC_TASKS)) + _entries(_REAL_TASKS, 1.0),
+    # The three local object variants form one logical pick/place task. Their
+    # weights sum to one public task, so public data remains dominant (16:1).
+    # Keep balance_dataset_weights=false in the YAML.
+    "agibot_g1_all": _entries(_PUBLIC_TASKS, 1.0) + _entries(_REAL_TASKS, 1.0 / len(_REAL_TASKS)),
 }

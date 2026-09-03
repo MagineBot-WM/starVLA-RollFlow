@@ -9,6 +9,7 @@ data_root="${DATA_ROOT:-/data/tzq/datasets/starVLA/Datasets/libero}"
 run_root="${RUN_ROOT:-/data/tzq/starVLA_checkpoints}"
 run_id="${RUN_ID:-libero_qwengroot_rollflow_h32_c8_b128_unfrozen}"
 num_gpus="${NUM_GPUS:-4}"
+main_process_port="${MAIN_PROCESS_PORT:-29501}"
 batch_per_gpu="${BATCH_PER_GPU:-32}"
 max_train_steps="${MAX_TRAIN_STEPS:-80000}"
 save_interval="${SAVE_INTERVAL:-5000}"
@@ -35,10 +36,10 @@ if [[ "${1:-}" != "--worker" ]]; then
 
   log_file="${run_root}/${run_id}.train.log"
   printf -v worker_cmd \
-    'cd %q && exec env STARVLA_DIR=%q STARVLA_PYTHON=%q CONFIG_YAML=%q DATA_ROOT=%q RUN_ROOT=%q RUN_ID=%q NUM_GPUS=%q BATCH_PER_GPU=%q MAX_TRAIN_STEPS=%q SAVE_INTERVAL=%q LOGGING_FREQUENCY=%q WAIT_FOR_GPU_FREE=%q WANDB_MODE=disabled %q --worker >> %q 2>&1' \
+    'cd %q && exec env STARVLA_DIR=%q STARVLA_PYTHON=%q CONFIG_YAML=%q DATA_ROOT=%q RUN_ROOT=%q RUN_ID=%q NUM_GPUS=%q MAIN_PROCESS_PORT=%q BATCH_PER_GPU=%q MAX_TRAIN_STEPS=%q SAVE_INTERVAL=%q LOGGING_FREQUENCY=%q WAIT_FOR_GPU_FREE=%q WANDB_MODE=disabled %q --worker >> %q 2>&1' \
     "${repo_root}" "${repo_root}" "${python_bin}" "${config_yaml}" \
     "${data_root}" "${run_root}" "${run_id}" "${num_gpus}" \
-    "${batch_per_gpu}" "${max_train_steps}" "${save_interval}" \
+    "${main_process_port}" "${batch_per_gpu}" "${max_train_steps}" "${save_interval}" \
     "${logging_frequency}" "${wait_for_gpu_free}" "${script_path}" "${log_file}"
 
   tmux new-session -d -s "${tmux_session}" "${worker_cmd}"
@@ -64,6 +65,7 @@ export WANDB_MODE=disabled
 exec "${python_bin}" -m accelerate.commands.launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes "${num_gpus}" \
+  --main_process_port "${main_process_port}" \
   starVLA/training/train_starvla.py \
   --config_yaml "${config_yaml}" \
   --datasets.vla_data.data_root_dir "${data_root}" \

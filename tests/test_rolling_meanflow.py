@@ -25,10 +25,12 @@ class _LearnableConstant(nn.Module):
         super().__init__()
         self.value = nn.Parameter(torch.tensor(0.0))
         self.batch_sizes = []
+        self.grad_enabled = []
 
     def forward(self, z, source_time, target_time, context, **kwargs):
         del source_time, target_time, context, kwargs
         self.batch_sizes.append(z.shape[0])
+        self.grad_enabled.append(torch.is_grad_enabled())
         return self.value.expand_as(z)
 
 
@@ -140,7 +142,7 @@ def test_linear_path_oracle_has_zero_fm_and_lsd_error():
     assert stats["lsd_loss"] < 1e-7
 
 
-def test_loss_uses_two_calls_with_3b_and_2b_batches():
+def test_loss_retains_gradients_only_for_tangent_and_local_paths():
     torch.manual_seed(0)
     rollflow = RollFlow(_config(train_steps=[2]))
     model = _LearnableConstant()
@@ -149,7 +151,8 @@ def test_loss_uses_two_calls_with_3b_and_2b_batches():
     loss, _ = rollflow.loss(model, actions)
     loss.backward()
 
-    assert model.batch_sizes == [9, 6]
+    assert model.batch_sizes == [6, 3, 3, 3]
+    assert model.grad_enabled == [True, False, False, True]
     assert model.value.grad is not None
     assert torch.isfinite(model.value.grad)
 

@@ -7,24 +7,22 @@ Core training algorithm
     x_t = (1-t) * x0 + t * x1
     v_gt = x1 - x0
 
-    # 3B parallel flow-map prediction
-    V_minus, V_st, V_plus = model(
-        cat(x_s, x_s, x_s),
-        cat(s, s, s),
-        cat(t-delta, t, t+delta),
-    ).chunk(3)
+    # Keep gradients only for predictions that occur in the loss.
+    V_minus, V_plus = model(
+        cat(x_s, x_s), cat(s, s), cat(t-delta, t+delta)
+    ).chunk(2)
+    with no_grad:
+        V_st = model(x_s, s, t)
 
     X_minus = x_s + (t-delta-s) * V_minus
     X_plus  = x_s + (t+delta-s) * V_plus
     v_tangent = (X_plus - X_minus) / (2*delta)
     X_t_hat = x_s + (t-s) * V_st
 
-    # 2B parallel local FM supervision + self-teacher
-    v_local, v_teacher = model(
-        cat(x_t, X_t_hat),
-        cat(t, t),
-        cat(t, t),
-    ).chunk(2)
+    # The self-teacher is inference-only; local FM is the other gradient path.
+    with no_grad:
+        v_teacher = model(X_t_hat, t, t)
+    v_local = model(x_t, t, t)
 
     loss_fm  = MSE(v_local, v_gt)
     loss_lsd = MSE(v_tangent, stopgrad(v_teacher))
@@ -207,10 +205,12 @@ def central_difference_lsd(
     w_lsd: float = 0.5,
     model_kwargs: Optional[dict[str, Any]] = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
-    """Two parallel forwards implementing the paper-style pseudocode.
+    """Memory-efficient forwards implementing the paper-style objective.
 
     ``active`` marks tokens that carry a finite off-diagonal interval.  Diagonal
     staircase tokens still receive FM supervision but are excluded from LSD.
+    Teacher-only branches run without autograd; this changes memory use, not the
+    predicted values or objective.
     """
     kwargs = {} if model_kwargs is None else model_kwargs
     delta = float(delta)
@@ -222,16 +222,21 @@ def central_difference_lsd(
     v_gt = x1.float() - x0.float()
 
     # -------------------------------------------------------------------------
-    # 1. Parallel flow-map prediction: [t-delta, t, t+delta]
+    # 1. Flow-map prediction: gradients only through [t-delta, t+delta]
     # -------------------------------------------------------------------------
     # Diagonal tokens are not used by LSD. Keep their queries diagonal instead
     # of creating invalid backward maps with t-delta < s.
     t_minus = torch.where(active, t - delta, t)
     t_plus = torch.where(active, t + delta, t)
 
-    V_minus, V_st, V_plus = _parallel_flow_predictions(
-        model, x_s, s, t_minus, t, t_plus, context, kwargs
+    V_minus, V_plus = _parallel_tangent_predictions(
+        model, x_s, s, t_minus, t_plus, context, kwargs
     )
+
+    # V_st only constructs a detached teacher input. Running it separately
+    # avoids retaining a third B-sized DiT graph until the final backward.
+    with torch.no_grad():
+        V_st = _predict(model, x_s, s, t, context, kwargs)
 
     X_minus = flow_map(x_s, s, t_minus, V_minus)
     X_plus = flow_map(x_s, s, t_plus, V_plus)
@@ -241,12 +246,13 @@ def central_difference_lsd(
     X_t_hat = flow_map(x_s, s, t, V_st).detach()
 
     # -------------------------------------------------------------------------
-    # 2. Parallel local FM supervision + self-teacher
+    # 2. Local FM supervision + inference-only self-teacher
     # -------------------------------------------------------------------------
-    v_local, v_teacher = _parallel_local_teacher(
-        model, x_t, X_t_hat, t, context, kwargs
-    )
-    v_teacher = v_teacher.detach()
+    # Compute the teacher before the local gradient path so its temporary
+    # activations are already released when the local graph is constructed.
+    with torch.no_grad():
+        v_teacher = _predict(model, X_t_hat, t, t, context, kwargs)
+    v_local = _predict(model, x_t, t, t, context, kwargs)
 
     loss_fm = masked_mse(v_local - v_gt, pad=pad)
     loss_lsd = masked_mse(v_tangent - v_teacher, pad=pad, valid=active)
@@ -474,12 +480,11 @@ def _predict(
     return out
 
 
-def _parallel_flow_predictions(
+def _parallel_tangent_predictions(
     model,
     x_s,
     s,
     t_minus,
-    t,
     t_plus,
     context,
     kwargs,
@@ -487,23 +492,9 @@ def _parallel_flow_predictions(
     B = x_s.shape[0]
     out = _predict(
         model,
-        torch.cat((x_s, x_s, x_s), dim=0),
-        torch.cat((s, s, s), dim=0),
-        torch.cat((t_minus, t, t_plus), dim=0),
-        repeat_batch(context, 3, B),
-        repeat_batch(kwargs, 3, B),
-    )
-    return out.chunk(3, dim=0)
-
-
-def _parallel_local_teacher(model, x_t, X_t_hat, t, context, kwargs):
-    B = x_t.shape[0]
-    tt = torch.cat((t, t), dim=0)
-    out = _predict(
-        model,
-        torch.cat((x_t, X_t_hat), dim=0),
-        tt,
-        tt,
+        torch.cat((x_s, x_s), dim=0),
+        torch.cat((s, s), dim=0),
+        torch.cat((t_minus, t_plus), dim=0),
         repeat_batch(context, 2, B),
         repeat_batch(kwargs, 2, B),
     )

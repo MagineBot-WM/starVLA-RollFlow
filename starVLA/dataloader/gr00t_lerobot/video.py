@@ -14,11 +14,24 @@
 # limitations under the License.
 
 
+import warnings
+
 import av
 import cv2
 import numpy as np
 
 import torch  # noqa: F401 # isort: skip
+
+# torchvision 0.22+ emits this import-time deprecation notice in every
+# distributed rank/worker. The current dataset intentionally uses
+# `video_backend: torchvision_av`, so it is informational—not a failed decode.
+# Suppress this one known message only; all other UserWarnings remain visible.
+warnings.filterwarnings(
+    "ignore",
+    message=r"The video decoding and encoding capabilities of torchvision are deprecated.*",
+    category=UserWarning,
+    module=r"torchvision\.io\._video_deprecation_warning",
+)
 import torchvision  # noqa: F401 # isort: skip
 
 # Import decord with graceful fallback

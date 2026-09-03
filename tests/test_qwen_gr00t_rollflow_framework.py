@@ -133,3 +133,26 @@ def test_qwen_rollflow_forwards_action_padding_mask(monkeypatch):
 
     assert loss.item() == 0.0
     assert model.action_model.action_decoder.layer2.weight.grad is not None
+
+
+def test_qwen_rollflow_converts_bfloat16_predictions_to_numpy(monkeypatch):
+    torch.manual_seed(0)
+    monkeypatch.setattr(rollflow_framework, "get_vlm_model", lambda config: _TinyVLM())
+    model = rollflow_framework.Qwen_GR00T_RollFlow(_tiny_framework_config())
+    image = Image.fromarray(np.zeros((16, 16, 3), dtype=np.uint8))
+    example = {
+        "action": np.zeros((4, 3), dtype=np.float32),
+        "image": [image],
+        "lang": "bfloat16 inference",
+        "state": np.zeros((1, 2), dtype=np.float32),
+    }
+    monkeypatch.setattr(
+        model.action_model,
+        "predict_action",
+        lambda *args, **kwargs: torch.ones(1, 2, 3, dtype=torch.bfloat16),
+    )
+
+    prediction = model.predict_action([example])["normalized_actions"]
+
+    assert prediction.dtype == np.float32
+    np.testing.assert_array_equal(prediction, np.ones((1, 2, 3), dtype=np.float32))

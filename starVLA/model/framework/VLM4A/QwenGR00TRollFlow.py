@@ -304,7 +304,10 @@ class Qwen_GR00T_RollFlow(baseframework):
                 refinement_steps=kwargs.get("refinement_steps"),
             )  # (B, chunk_len, action_dim)
 
-        normalized_actions = pred_actions.detach().cpu().numpy()
+        # NumPy has no bfloat16 dtype. DeepSpeed/bf16 evaluation can propagate
+        # the backbone dtype through the action head, so normalize the public
+        # API to float32 before crossing the Torch/NumPy boundary.
+        normalized_actions = pred_actions.detach().float().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
     def reset(self) -> None:

@@ -32,7 +32,7 @@ def _config(**overrides):
         "noise_s": 0.999,
         "num_inference_timesteps": 2,
         "num_timestep_buckets": 1000,
-        "finite_difference_delta": 0.02,
+        "finite_difference_delta": 0.01,
         "train_steps": [2],
         "inference_steps": 2,
         "w_fm": 1.0,
@@ -172,7 +172,8 @@ def test_rollflow_head_disables_stochastic_finite_differences():
 def test_config_defaults_and_legacy_gr00t_checkpoint_loading():
     defaults = RollFlowActionHeadConfig()
     assert defaults.diffusion_model_cfg == {}
-    assert defaults.to_dict()["finite_difference_delta"] == 0.02
+    assert defaults.to_dict()["finite_difference_delta"] == 0.01
+    assert defaults.to_dict()["use_ot"] is True
 
     diffusion_cfg = _config().framework.action_model.diffusion_model_cfg.copy()
     diffusion_cfg.update(num_attention_heads=12, attention_head_dim=64, num_layers=1)

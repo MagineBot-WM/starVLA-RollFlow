@@ -27,7 +27,6 @@ import zmq
 from deployment.model_server.gr00t_obs_adapter import Gr00tCompatPolicy
 from deployment.model_server.tools.zmq_policy_server import ZmqGr00tPolicyServer
 
-
 # ---------------------------------------------------------------------------
 # Bridge-side codec, copied verbatim from gr00t_n1_wbc_bridge_deploy.py so the
 # test exercises the exact bytes the bridge would send/receive.
@@ -114,6 +113,7 @@ class _StubWrapper:
 
     def __init__(self):
         self.requests = []
+        self.reset_calls = 0
 
     def get_norm_processor(self, unnorm_key=None):
         return _StubProcessor()
@@ -122,6 +122,9 @@ class _StubWrapper:
         self.requests.append({"examples": examples, "unnorm_key": unnorm_key})
         chunk = np.tile(np.arange(ACTION_DIM, dtype=np.float32), (1, CHUNK, 1))
         return {"actions": chunk}
+
+    def reset(self):
+        self.reset_calls += 1
 
 
 def _bridge_observation(n_hist: int = 1) -> dict:
@@ -180,7 +183,9 @@ class Gr00tZmqCompatServerTest(unittest.TestCase):
 
     def test_ping_and_reset(self):
         self.assertEqual(self.client.call("ping").get("status"), "ok")
+        reset_calls = self.wrapper.reset_calls
         self.assertTrue(self.client.call("reset", {"options": None}).get("ok"))
+        self.assertEqual(self.wrapper.reset_calls, reset_calls + 1)
 
     def test_modality_config_reports_contract(self):
         contract = self.client.call("get_modality_config")

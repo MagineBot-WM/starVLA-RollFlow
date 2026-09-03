@@ -249,6 +249,26 @@ class PolicyServerOverrideTest(unittest.TestCase):
         self.assertEqual(wrapper.metadata["training_obs_image_size"], [128, 128])
         self.assertEqual(wrapper._model_cfg["framework"]["action_model"]["action_horizon"], 12)
 
+    def test_policy_server_uses_executable_horizon_and_forwards_reset(self):
+        model_cfg = _checkpoint_config()
+        norm_stats = {"key_a": {}, "key_b": {}}
+        model = _FakeServerModel()
+        model.action_model = mock.Mock(execution_horizon=1)
+        model.reset = mock.Mock()
+
+        with (
+            mock.patch.object(policy_wrapper.baseframework, "from_pretrained", return_value=model),
+            mock.patch.object(policy_wrapper, "read_mode_config", return_value=(model_cfg, norm_stats)),
+        ):
+            wrapper = policy_wrapper.PolicyServerWrapper(
+                ckpt_path="/tmp/model.pt",
+                device="cpu",
+            )
+
+        self.assertEqual(wrapper.metadata["action_chunk_size"], 1)
+        wrapper.reset()
+        model.reset.assert_called_once_with()
+
     def test_policy_server_wrapper_rejects_bare_string_config_overrides(self):
         model_cfg = _checkpoint_config()
         norm_stats = {"key_a": {}, "key_b": {}}

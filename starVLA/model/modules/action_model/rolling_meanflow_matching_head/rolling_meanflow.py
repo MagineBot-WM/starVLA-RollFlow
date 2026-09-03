@@ -36,10 +36,12 @@ Time convention
     x1 = clean action trajectory at flow time 1
     X_{s,t}(z) = z + (t-s) * u_theta(z,s,t),  s <= t
 
-Training uses a random RollFlow staircase.  With horizon H and chunk size C,
-M = H/C action chunks exist.  A refinement depth K is sampled from train_steps
-(default 1..M).  The first K chunks form K adjacent flow intervals; later chunks
-stay diagonal at the source time and receive only local FM supervision.
+Training uses a random RollFlow staircase.  With horizon H and execution chunk
+size C, M = H/C action chunks exist.  ``train_block_sizes`` controls how many
+adjacent action chunks share one flow interval.  A block size of M gives the
+ordinary FM time layout (one source/target time for the whole horizon), while a
+block size of 1 gives the full M-level rolling staircase.  The legacy
+``train_steps`` refinement-depth sampler remains available for old experiments.
 
 There is no JVP, CSF, Split loss, persistent training cache, or adjacent-window
 training sampler.  Rolling state exists only at inference.
@@ -51,9 +53,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
 import torch
-import torch.nn as nn
-from torch import Tensor
-
+from torch import Tensor, nn
 
 # =============================================================================
 # 1. Configuration
@@ -66,13 +66,14 @@ class RollFlowConfig:
     action_dim: int
     chunk_size: int
 
-    finite_difference_delta: float = 0.02
+    finite_difference_delta: float = 0.01
     train_steps: Optional[Sequence[int]] = None
+    train_block_sizes: Optional[Sequence[int]] = None
     inference_steps: Optional[int] = None
 
     w_fm: float = 1.0
     w_lsd: float = 0.5
-    use_ot: bool = False
+    use_ot: bool = True
 
     clip_velocity: float = 0.0
     iterative_cold_start: bool = False
@@ -90,23 +91,45 @@ class RollFlowConfig:
         if self.clip_velocity < 0:
             raise ValueError("clip_velocity must be non-negative")
 
-        steps = self.resolved_train_steps
-        if not steps or any(not self.valid_steps(k) for k in steps):
-            raise ValueError(f"train_steps must lie in [1,{self.num_action_chunks}]")
-        if len(set(steps)) != len(steps):
-            raise ValueError("train_steps must not contain duplicates")
+        if self.train_steps is not None and self.train_block_sizes is not None:
+            raise ValueError("set only one of train_steps and train_block_sizes")
+
+        block_sizes = self.resolved_train_block_sizes
+        if block_sizes is None:
+            steps = self.resolved_train_steps
+            if not steps or any(not self.valid_steps(k) for k in steps):
+                raise ValueError(f"train_steps must lie in [1,{self.num_action_chunks}]")
+            if len(set(steps)) != len(steps):
+                raise ValueError("train_steps must not contain duplicates")
+            max_levels = max(steps)
+            interval_name = "train_steps"
+        else:
+            if not block_sizes or any(
+                size <= 0 or self.num_action_chunks % size for size in block_sizes
+            ):
+                raise ValueError(
+                    "train_block_sizes must be positive divisors of "
+                    f"num_action_chunks={self.num_action_chunks}"
+                )
+            if len(set(block_sizes)) != len(block_sizes):
+                raise ValueError("train_block_sizes must not contain duplicates")
+            max_levels = max(self.num_action_chunks // size for size in block_sizes)
+            interval_name = "train_block_sizes"
+
         if not self.valid_steps(self.resolved_inference_steps):
             raise ValueError(
                 f"inference_steps must lie in [1,{self.num_action_chunks}]"
             )
 
         # A K-level central-difference staircase needs K intervals, each wider
-        # than delta, and delta room above the largest terminal time.
-        max_k = max(steps)
-        if (max_k + 1) * self.finite_difference_delta >= 1.0:
+        # than delta, and delta room above the largest terminal time.  Keep this
+        # check identical to the bounds used by ``sample_training`` so an
+        # accepted config cannot fail only when the first batch is sampled.
+        eps = max(1e-6, self.finite_difference_delta * 1e-3)
+        if max_levels * (self.finite_difference_delta + eps) >= 1.0 - self.finite_difference_delta:
             raise ValueError(
-                "finite_difference_delta is too large for the requested train_steps: "
-                "require (max(train_steps)+1)*delta < 1"
+                "finite_difference_delta is too large for the requested "
+                f"{interval_name}"
             )
 
     @property
@@ -118,6 +141,12 @@ class RollFlowConfig:
         if self.train_steps is None:
             return tuple(range(1, self.num_action_chunks + 1))
         return tuple(int(k) for k in self.train_steps)
+
+    @property
+    def resolved_train_block_sizes(self) -> Optional[tuple[int, ...]]:
+        if self.train_block_sizes is None:
+            return None
+        return tuple(int(size) for size in self.train_block_sizes)
 
     @property
     def resolved_inference_steps(self) -> int:
@@ -139,6 +168,7 @@ class StaircaseTimes:
     refinement_steps: int
     lower: Tensor
     upper: Tensor
+    block_size: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -238,7 +268,19 @@ def central_difference_lsd(
 
 
 class StaircaseTimeSampler:
-    """Random training staircase + exact deployment staircase.
+    """Grouped random training times + exact deployment staircase.
+
+    During training, a block size G makes each group of G action chunks share
+    one interval.  For L=M/G levels, chunk j uses ``level=floor(j/G)`` and
+
+        t_j = T - level/L     * (T-R)
+        s_j = T - (level+1)/L * (T-R)
+
+    Thus G=M is the ordinary whole-horizon FM time layout, and G=1 is the full
+    rolling staircase.
+
+    Deployment retains the refinement-depth K layout required for exact cache
+    alignment after shifting one execution chunk:
 
     For a sampled interval [R,T] and K refinement levels, chunk j uses
 
@@ -256,6 +298,10 @@ class StaircaseTimeSampler:
     def __init__(self, cfg: RollFlowConfig):
         self.cfg = cfg
         self._steps = torch.tensor(cfg.resolved_train_steps, dtype=torch.long)
+        block_sizes = cfg.resolved_train_block_sizes
+        self._block_sizes = (
+            None if block_sizes is None else torch.tensor(block_sizes, dtype=torch.long)
+        )
 
     def sample_training(
         self,
@@ -265,27 +311,50 @@ class StaircaseTimeSampler:
         dtype=torch.float32,
         generator=None,
         refinement_steps: Optional[int] = None,
+        block_size: Optional[int] = None,
     ) -> StaircaseTimes:
         if batch <= 0:
             raise ValueError("batch must be positive")
+        if refinement_steps is not None and block_size is not None:
+            raise ValueError("set only one of refinement_steps and block_size")
+        if self._block_sizes is not None and refinement_steps is not None:
+            raise ValueError("grouped training uses block_size, not refinement_steps")
         device = torch.device(device)
-        K = (
-            self._sample_k(device, generator)
-            if refinement_steps is None
-            else int(refinement_steps)
-        )
-        if not self.cfg.valid_steps(K):
-            raise ValueError(f"refinement_steps must lie in [1,{self.cfg.num_action_chunks}]")
+
+        grouped = block_size is not None or self._block_sizes is not None
+        if grouped:
+            G = (
+                self._sample_value(self._block_sizes, device, generator)
+                if block_size is None
+                else int(block_size)
+            )
+            if G <= 0 or self.cfg.num_action_chunks % G:
+                raise ValueError(
+                    "block_size must be a positive divisor of "
+                    f"num_action_chunks={self.cfg.num_action_chunks}"
+                )
+            levels = self.cfg.num_action_chunks // G
+        else:
+            G = None
+            levels = (
+                self._sample_value(self._steps, device, generator)
+                if refinement_steps is None
+                else int(refinement_steps)
+            )
+            if not self.cfg.valid_steps(levels):
+                raise ValueError(
+                    f"refinement_steps must lie in [1,{self.cfg.num_action_chunks}]"
+                )
 
         delta = self.cfg.finite_difference_delta
         eps = max(1e-6, delta * 1e-3)
-        min_gap = K * (delta + eps)
+        min_gap = levels * (delta + eps)
         max_gap = 1.0 - delta
         if min_gap >= max_gap:
-            raise ValueError("no valid central-difference interval for this K")
+            raise ValueError("no valid central-difference interval for these training times")
 
-        # Random global interval [R,T], with enough width for K adjacent
-        # central-difference-valid subintervals and delta room above T.
+        # Random global interval [R,T], with enough width for every adjacent,
+        # central-difference-valid subinterval and delta room above T.
         gap = torch.empty(batch, device=device, dtype=dtype).uniform_(
             min_gap, max_gap, generator=generator
         )
@@ -293,8 +362,11 @@ class StaircaseTimeSampler:
         lower = lower * (1.0 - delta - gap)
         upper = lower + gap
 
-        s, t, active = self._build(lower, upper, K)
-        return StaircaseTimes(s, t, active, K, lower, upper)
+        if G is None:
+            s, t, active = self._build(lower, upper, levels)
+        else:
+            s, t, active = self._build_grouped(lower, upper, G)
+        return StaircaseTimes(s, t, active, levels, lower, upper, G)
 
     def deployment(
         self,
@@ -319,13 +391,16 @@ class StaircaseTimeSampler:
             active = t > 0
         return StaircaseTimes(s, t, active, K, lower, upper)
 
-    def _sample_k(self, device, generator) -> int:
+    @staticmethod
+    def _sample_value(values, device, generator) -> int:
+        if values is None:
+            raise ValueError("no configured training values to sample")
         idx = int(
             torch.randint(
-                len(self._steps), (), device=device, generator=generator
+                len(values), (), device=device, generator=generator
             ).item()
         )
-        return int(self._steps[idx])
+        return int(values[idx])
 
     def _build(
         self, lower: Tensor, upper: Tensor, K: int
@@ -343,6 +418,24 @@ class StaircaseTimeSampler:
         t = t_chunk.repeat_interleave(cfg.chunk_size, dim=1).unsqueeze(-1)
         s = s_chunk.repeat_interleave(cfg.chunk_size, dim=1).unsqueeze(-1)
         active = (t - s) > self.cfg.finite_difference_delta
+        return s, t, active
+
+    def _build_grouped(
+        self, lower: Tensor, upper: Tensor, block_size: int
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        cfg = self.cfg
+        levels = cfg.num_action_chunks // block_size
+        chunk = torch.arange(
+            cfg.num_action_chunks, device=lower.device, dtype=lower.dtype
+        )
+        level = torch.floor(chunk / block_size)
+        gap = (upper - lower)[:, None]
+
+        t_chunk = upper[:, None] - gap * (level / levels)[None, :]
+        s_chunk = upper[:, None] - gap * ((level + 1.0) / levels)[None, :]
+        t = t_chunk.repeat_interleave(cfg.chunk_size, dim=1).unsqueeze(-1)
+        s = s_chunk.repeat_interleave(cfg.chunk_size, dim=1).unsqueeze(-1)
+        active = (t - s) > cfg.finite_difference_delta
         return s, t, active
 
 
@@ -446,7 +539,9 @@ def masked_mse(
         v = valid.squeeze(-1) if valid.ndim == 3 else valid
         mask &= v.bool()
     if not bool(mask.any()):
-        return loss.new_zeros(())
+        # Summing an empty differentiable view returns a graph-connected zero,
+        # allowing distributed/all-padding batches to participate in backward.
+        return loss[mask].sum()
     return loss[mask].mean()
 
 
@@ -539,6 +634,8 @@ class RollFlow:
             "lsd_loss": float(stats["lsd_loss"].cpu()),
             "active_lsd_frac": float(stats["active_lsd_frac"].cpu()),
             "refinement_steps": times.refinement_steps,
+            "num_time_levels": times.refinement_steps,
+            "train_block_size": times.block_size,
             "interval_lower": float(times.lower.mean().cpu()),
             "interval_upper": float(times.upper.mean().cpu()),
             "s_min": float(times.s.min().cpu()),

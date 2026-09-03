@@ -46,11 +46,14 @@ def _tiny_framework_config():
                 "name": "QwenGR00TRollFlow",
                 "action_model": {
                     "action_horizon": 4,
+                    "execution_horizon": 2,
                     "action_dim": 3,
                     "state_dim": 2,
                     "hidden_size": 16,
                     "max_seq_len": 8,
                     "num_target_vision_tokens": 2,
+                    "train_block_sizes": [1, 2],
+                    "inference_steps": 2,
                     "diffusion_model_cfg": {
                         "num_attention_heads": 2,
                         "attention_head_dim": 8,
@@ -64,17 +67,24 @@ def _tiny_framework_config():
     )
 
 
-def test_qwen_rollflow_defaults_keep_noise_repetition():
+def test_qwen_rollflow_defaults_are_explicit_and_reproducible():
     defaults = rollflow_framework.QwenGR00TRollFlowDefaultConfig()
     assert defaults.qwenvl["base_vlm"].endswith("Qwen3.5-0.8B")
-    assert defaults.action_model["repeated_diffusion_steps"] == 8
+    assert defaults.action_model["action_horizon"] == 32
+    assert defaults.action_model["execution_horizon"] == 8
+    assert defaults.action_model["repeated_diffusion_steps"] == 4
+    assert defaults.action_model["finite_difference_delta"] == 0.01
+    assert defaults.action_model["train_block_sizes"] == [1, 2, 4]
+    assert defaults.action_model["inference_steps"] == 4
+    assert defaults.action_model["use_ot"] is True
+    assert defaults.action_model["diffusion_model_cfg"]["dropout"] == 0.0
 
 
 def test_qwen_rollflow_full_policy_with_tiny_vlm(monkeypatch):
     torch.manual_seed(0)
     monkeypatch.setattr(rollflow_framework, "get_vlm_model", lambda config: _TinyVLM())
     model = rollflow_framework.Qwen_GR00T_RollFlow(_tiny_framework_config())
-    assert model.config.framework.action_model.repeated_diffusion_steps == 8
+    assert model.config.framework.action_model.repeated_diffusion_steps == 4
 
     image = Image.fromarray(np.zeros((16, 16, 3), dtype=np.uint8))
     example = {
@@ -91,10 +101,31 @@ def test_qwen_rollflow_full_policy_with_tiny_vlm(monkeypatch):
     assert model.action_model.model.interval_timestep_encoder.timestep_embedder.linear_1.weight.grad is not None
 
     model.eval()
-    cold = model.predict_action([example])["normalized_actions"]
-    warm = model.predict_action([example])["normalized_actions"]
-    assert cold.shape == warm.shape == (1, 1, 3)
+    cold = model.predict_action([example], refinement_steps=2)["normalized_actions"]
+    warm = model.predict_action([example], refinement_steps=2)["normalized_actions"]
+    assert cold.shape == warm.shape == (1, 2, 3)
     assert np.isfinite(cold).all() and np.isfinite(warm).all()
+    assert model.action_model.cache_info.refinement_steps == 2
 
-    model.action_model.reset_cache()
+    model.reset()
     assert model.action_model.cache_info is None
+
+
+def test_qwen_rollflow_forwards_action_padding_mask(monkeypatch):
+    torch.manual_seed(0)
+    monkeypatch.setattr(rollflow_framework, "get_vlm_model", lambda config: _TinyVLM())
+    model = rollflow_framework.Qwen_GR00T_RollFlow(_tiny_framework_config())
+    image = Image.fromarray(np.zeros((16, 16, 3), dtype=np.uint8))
+    example = {
+        "action": np.zeros((4, 3), dtype=np.float32),
+        "action_padding_mask": np.ones(4, dtype=bool),
+        "image": [image],
+        "lang": "fully padded test",
+        "state": np.zeros((1, 2), dtype=np.float32),
+    }
+
+    loss = model([example])["action_loss"]
+    loss.backward()
+
+    assert loss.item() == 0.0
+    assert model.action_model.action_decoder.layer2.weight.grad is not None

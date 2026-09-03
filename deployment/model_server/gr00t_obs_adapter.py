@@ -132,7 +132,15 @@ class Gr00tCompatPolicy:
         return action_dict, info
 
     def reset(self, options: Optional[dict] = None) -> Dict[str, Any]:
-        # starVLA inference is stateless per request; nothing to clear.
+        """Clear rolling state when the client explicitly starts a new task.
+
+        This is not called by ``get_action`` and robot homing does not trigger
+        it automatically.
+        """
+        del options
+        reset = getattr(self._wrapper, "reset", None)
+        if callable(reset):
+            reset()
         return {"ok": True}
 
     def get_modality_config(self) -> Dict[str, Any]:

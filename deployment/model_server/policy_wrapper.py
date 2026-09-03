@@ -27,10 +27,9 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 import torch
 
+from deployment.model_server.policy_norm_processor import PolicyNormProcessor
 from starVLA.model.framework.base_framework import baseframework, merge_config_overrides
 from starVLA.model.framework.share_tools import read_mode_config
-
-from deployment.model_server.policy_norm_processor import PolicyNormProcessor
 
 
 def _training_obs_image_size(model_cfg: Dict[str, Any]) -> Optional[List[int]]:
@@ -75,16 +74,20 @@ class PolicyServerWrapper:
         model_cfg = merge_config_overrides(model_cfg, config_overrides)
         self._model_cfg = model_cfg
 
-        # action_chunk_size = future_action_window_size + 1 (matches old client).
+        # Most policies return the full planning horizon. Rolling policies expose
+        # a smaller executable chunk directly from their action head.
         action_model_cfg = model_cfg["framework"]["action_model"]
-
-        if "action_horizon" in action_model_cfg:
+        execution_horizon = getattr(getattr(framework, "action_model", None), "execution_horizon", None)
+        if execution_horizon is not None:
+            self._action_chunk_size = int(execution_horizon)
+        elif "action_horizon" in action_model_cfg:
             self._action_chunk_size = int(action_model_cfg["action_horizon"])
         elif "future_action_window_size" in action_model_cfg:
             self._action_chunk_size = int(action_model_cfg["future_action_window_size"]) + 1
         else:
             raise ValueError(
-                f"PolicyServerWrapper: no action_horizon or future_action_window_size found in model config for {self._ckpt_path}"
+                "PolicyServerWrapper: no action_horizon or future_action_window_size "
+                f"found in model config for {self._ckpt_path}"
             )
         # Cache of PolicyNormProcessor instances per unnorm_key.
         # For single-dataset ckpts unnorm_key is auto-selected; for multi-dataset
@@ -195,3 +198,9 @@ class PolicyServerWrapper:
             axis=0,
         )
         return {"actions": unnorm}
+
+    def reset(self) -> None:
+        """Forward an episode reset to stateful frameworks when supported."""
+        reset = getattr(self._framework, "reset", None)
+        if callable(reset):
+            reset()

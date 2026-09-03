@@ -1,5 +1,6 @@
 # Copyright 2025 starVLA community. All rights reserved.
 # Licensed under the MIT License, Version 1.0 (the "License");
+# ruff: noqa: E402
 # Implemented by [Junqiu YU / Fudan University] in [2025].
 # Design and Merged by [Jinhui YE / HKUST University] in [2025].
 """
@@ -17,7 +18,7 @@ if str(_workspace_root) not in sys.path:
     sys.path.insert(0, str(_workspace_root))
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -71,7 +72,8 @@ class QwenGR00TRollFlowDefaultConfig:
         }
     )
 
-    # # === DINO encoder (optional multi-view spatial tokens) === Dino is not used in this QwenGR00T version, we can add it later when we want to use it
+    # DINO is not used in this QwenGR00T version; it can be added later for
+    # optional multi-view spatial tokens.
     # dino: dict = field(default_factory=lambda: {
     #     # DINO backbone variant: "dinov2_vits14" | "dinov2_vitb14" | ...
     #     "dino_backbone": "dinov2_vits14",
@@ -95,24 +97,33 @@ class QwenGR00TRollFlowDefaultConfig:
             # Canonical chunk length (number of action steps the head predicts).
             # Legacy YAMLs may use future_action_window_size = action_horizon - 1;
             # apply_config_compat normalises both directions.
-            "action_horizon": 8,
-            # Repeat factor for flow-matching loss (more noise samples per batch)
-            "repeated_diffusion_steps": 8,
-            # Beta distribution params for noise schedule
-            "noise_beta_alpha": 1.5,
-            "noise_beta_beta": 1.0,
-            "noise_s": 0.999,
+            "action_horizon": 32,
+            # Number of actions returned and shifted from the rolling cache.
+            "execution_horizon": 8,
+            # Four independent noise/time samples per raw condition.
+            "repeated_diffusion_steps": 4,
             "num_timestep_buckets": 1000,
-            # Inference denoising steps
-            "num_inference_timesteps": 4,
+            # RollFlow objective and staircase defaults.
+            "finite_difference_delta": 0.01,
+            # Adjacent 8-action chunks sharing one training-time flow interval.
+            # 4 means the full 32-action horizon uses ordinary FM-style times.
+            "train_block_sizes": [1, 2, 4],
+            "inference_steps": 4,
+            "w_fm": 1.0,
+            "w_lsd": 0.25,
+            "use_ot": True,
+            "clip_velocity": 0.0,
+            "iterative_cold_start": True,
+            "reset_cache_each_step": False,
             # Number of vision tokens fed to action head
             "num_target_vision_tokens": 32,
             # === DiT Transformer sub-config ===
             "diffusion_model_cfg": {
                 # Cross-attention dim (aligned to VLM hidden_size at runtime)
                 "cross_attention_dim": 2048,
-                "dropout": 0.2,
-                "final_dropout": True,
+                # Independent masks would contaminate the finite difference.
+                "dropout": 0.0,
+                "final_dropout": False,
                 "interleave_self_attention": True,
                 "norm_type": "ada_norm",
                 "num_layers": 16,
@@ -169,9 +180,9 @@ class Qwen_GR00T_RollFlow(baseframework):
 
     def forward(
         self,
-        examples: List[dict] = None,
+        examples: Optional[List[dict]] = None,
         **kwargs,
-    ) -> Tuple:
+    ) -> dict[str, torch.Tensor]:
         """ """
         batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
@@ -193,9 +204,9 @@ class Qwen_GR00T_RollFlow(baseframework):
             last_hidden = qwenvl_outputs.hidden_states[-1]  # [B, L, H]
 
         # Step 4: Action Expert Forward and Loss
-        with torch.autocast("cuda", dtype=torch.float32):
+        with torch.autocast("cuda", enabled=False):
             actions = torch.tensor(
-                np.array(actions), device=last_hidden.device, dtype=last_hidden.dtype
+                np.array(actions), device=last_hidden.device, dtype=torch.float32
             )  # [B, T_full, action_dim]
             actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
@@ -213,12 +224,24 @@ class Qwen_GR00T_RollFlow(baseframework):
 
             state_repeated = None
             if state is not None:
-                state = torch.tensor(np.array(state), device=last_hidden.device, dtype=last_hidden.dtype)
+                state = torch.tensor(np.array(state), device=last_hidden.device, dtype=torch.float32)
                 state_repeated = state.repeat(repeated_diffusion_steps, 1, 1)
+
+            action_padding_mask = None
+            if "action_padding_mask" in examples[0]:
+                if not all("action_padding_mask" in example for example in examples):
+                    raise ValueError("action_padding_mask must be present for every example or none")
+                action_padding_mask = torch.as_tensor(
+                    np.array([example["action_padding_mask"] for example in examples]),
+                    device=last_hidden.device,
+                    dtype=torch.bool,
+                )[:, -self.action_horizon :]
+                action_padding_mask = action_padding_mask.repeat(repeated_diffusion_steps, 1)
 
             action_loss = self.action_model(
                 last_hidden_repeated, actions_target_repeated, state_repeated,
                 encoder_attention_mask=backbone_attention_mask,
+                action_padding_mask=action_padding_mask,
             )  # (B, chunk_len, action_dim)
 
         return {"action_loss": action_loss}
@@ -227,8 +250,8 @@ class Qwen_GR00T_RollFlow(baseframework):
     def predict_action(
         self,
         examples: List[dict],
-        **kwargs: str,
-    ) -> np.ndarray:
+        **kwargs,
+    ) -> dict[str, np.ndarray]:
         """
         Steps:
           1. Resize images to training resolution (if specified)
@@ -272,13 +295,22 @@ class Qwen_GR00T_RollFlow(baseframework):
         )
 
         # Step 4: Action Expert Forward
-        with torch.autocast("cuda", dtype=torch.float32):
+        with torch.autocast("cuda", enabled=False):
             pred_actions = self.action_model.predict_action(
-                last_hidden, state, encoder_attention_mask=backbone_attention_mask
+                last_hidden,
+                state,
+                encoder_attention_mask=backbone_attention_mask,
+                refinement_steps=kwargs.get("refinement_steps"),
             )  # (B, chunk_len, action_dim)
 
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}
+
+    def reset(self) -> None:
+        """Clear rolling state at every episode or task boundary."""
+        self.action_model.reset_cache()
+
+    reset_cache = reset
 
 
 if __name__ == "__main__":

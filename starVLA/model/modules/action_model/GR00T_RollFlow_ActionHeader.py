@@ -47,12 +47,13 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         execution_horizon: int = 1,
         num_timestep_buckets: int = 1000,
         num_target_vision_tokens: int = 32,
-        finite_difference_delta: float = 0.02,
+        finite_difference_delta: float = 0.01,
         train_steps: Optional[Sequence[int]] = None,
+        train_block_sizes: Optional[Sequence[int]] = None,
         inference_steps: Optional[int] = None,
         w_fm: float = 1.0,
         w_lsd: float = 0.5,
-        use_ot: bool = False,
+        use_ot: bool = True,
         clip_velocity: float = 0.0,
         iterative_cold_start: bool = False,
         reset_cache_each_step: bool = False,
@@ -72,6 +73,7 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         self.num_target_vision_tokens = num_target_vision_tokens
         self.finite_difference_delta = finite_difference_delta
         self.train_steps = train_steps
+        self.train_block_sizes = train_block_sizes
         self.inference_steps = inference_steps
         self.w_fm = w_fm
         self.w_lsd = w_lsd
@@ -147,13 +149,17 @@ class RollFlowActionHead(nn.Module):
                 action_dim=self.action_dim,
                 chunk_size=self.execution_horizon,
                 finite_difference_delta=float(
-                    _first_config_value(config, ("finite_difference_delta",), 0.02)
+                    _first_config_value(config, ("finite_difference_delta",), 0.01)
                 ),
                 train_steps=_first_config_value(config, ("train_steps",)),
-                inference_steps=_first_config_value(config, ("inference_steps",)),
+                train_block_sizes=_first_config_value(config, ("train_block_sizes",)),
+                inference_steps=_first_config_value(
+                    config,
+                    ("inference_steps", "num_inference_timesteps"),
+                ),
                 w_fm=float(_first_config_value(config, ("w_fm",), 1.0)),
                 w_lsd=float(_first_config_value(config, ("w_lsd",), 0.5)),
-                use_ot=bool(_first_config_value(config, ("use_ot",), False)),
+                use_ot=bool(_first_config_value(config, ("use_ot",), True)),
                 clip_velocity=float(_first_config_value(config, ("clip_velocity",), 0.0)),
                 iterative_cold_start=bool(
                     _first_config_value(config, ("iterative_cold_start",), False)

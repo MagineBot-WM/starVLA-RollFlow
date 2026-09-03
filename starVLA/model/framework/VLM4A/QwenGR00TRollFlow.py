@@ -103,11 +103,11 @@ class QwenGR00TRollFlowDefaultConfig:
             # Four independent noise/time samples per raw condition.
             "repeated_diffusion_steps": 4,
             "num_timestep_buckets": 1000,
-            # RollFlow objective and staircase defaults.
+            # RollFlow objective and randomized grouped-time defaults.
             "finite_difference_delta": 0.01,
-            # Adjacent 8-action chunks sharing one training-time flow interval.
-            # 4 means the full 32-action horizon uses ordinary FM-style times.
-            "train_block_sizes": [1, 2, 4],
+            "p_k1": 0.7,
+            "p_fm": 0.3,
+            "fm_curriculum_steps": 5000,
             "inference_steps": 4,
             "w_fm": 1.0,
             "w_lsd": 0.25,
@@ -242,6 +242,7 @@ class Qwen_GR00T_RollFlow(baseframework):
                 last_hidden_repeated, actions_target_repeated, state_repeated,
                 encoder_attention_mask=backbone_attention_mask,
                 action_padding_mask=action_padding_mask,
+                training_step=int(kwargs.get("training_step", 0)),
             )  # (B, chunk_len, action_dim)
 
         return {"action_loss": action_loss}

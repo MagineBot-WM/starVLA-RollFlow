@@ -22,7 +22,9 @@ framework:
     execution_horizon: 8
     repeated_diffusion_steps: 4
     finite_difference_delta: 0.01
-    train_block_sizes: [1, 2, 4]
+    p_k1: 0.7
+    p_fm: 0.3
+    fm_curriculum_steps: 5000
     inference_steps: 4
     w_fm: 1.0
     w_lsd: 0.25

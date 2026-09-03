@@ -33,7 +33,9 @@ def _config(**overrides):
         "num_inference_timesteps": 2,
         "num_timestep_buckets": 1000,
         "finite_difference_delta": 0.01,
-        "train_steps": [2],
+        "p_k1": 0.0,
+        "p_fm": 0.0,
+        "fm_curriculum_steps": 0,
         "inference_steps": 2,
         "w_fm": 1.0,
         "w_lsd": 0.5,
@@ -145,7 +147,7 @@ def test_rollflow_head_loss_backward_and_rolling_inference():
     assert interval_grad is not None and torch.isfinite(interval_grad).all()
     assert endpoint_grad.abs().sum() > 0
     assert interval_grad.abs().sum() > 0
-    assert model.last_loss_stats["refinement_steps"] == 2
+    assert model.last_loss_stats["num_time_groups"] == 2
 
     model.eval()
     cold_chunk = model.predict_action(context, state, encoder_attention_mask=context_mask)
@@ -174,6 +176,9 @@ def test_config_defaults_and_legacy_gr00t_checkpoint_loading():
     assert defaults.diffusion_model_cfg == {}
     assert defaults.to_dict()["finite_difference_delta"] == 0.01
     assert defaults.to_dict()["use_ot"] is True
+    assert defaults.to_dict()["p_k1"] == 0.7
+    assert defaults.to_dict()["p_fm"] == 0.3
+    assert defaults.to_dict()["fm_curriculum_steps"] == 5000
 
     diffusion_cfg = _config().framework.action_model.diffusion_model_cfg.copy()
     diffusion_cfg.update(num_attention_heads=12, attention_head_dim=64, num_layers=1)

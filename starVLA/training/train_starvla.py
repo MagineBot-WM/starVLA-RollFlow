@@ -64,6 +64,34 @@ def _get_state_dict(accelerator, model):
         return _unwrap_model(accelerator, model).state_dict()
     return accelerator.get_state_dict(model)
 
+
+def _align_action_targets(
+    predicted: np.ndarray,
+    actions: np.ndarray,
+    action_horizon: int,
+) -> np.ndarray:
+    """Select the supervised prefix corresponding to a policy's prediction."""
+    predicted = np.asarray(predicted)
+    actions = np.asarray(actions)
+    if predicted.ndim != 3 or actions.ndim != 3:
+        raise ValueError("predicted actions and targets must have [B,T,A] shapes")
+    if predicted.shape[0] != actions.shape[0] or predicted.shape[2] != actions.shape[2]:
+        raise ValueError(
+            f"prediction shape {predicted.shape} is incompatible with target shape {actions.shape}"
+        )
+
+    action_horizon = int(action_horizon)
+    if not 0 < action_horizon <= actions.shape[1]:
+        raise ValueError(
+            f"action_horizon={action_horizon} must lie in [1,{actions.shape[1]}]"
+        )
+    target_window = actions[:, -action_horizon:, :]
+    if predicted.shape[1] > target_window.shape[1]:
+        raise ValueError(
+            f"prediction length {predicted.shape[1]} exceeds target window {action_horizon}"
+        )
+    return target_window[:, : predicted.shape[1], :]
+
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -383,20 +411,37 @@ class VLATrainer(TrainerUtils):
 
         self._finalize_training()
 
-    def eval_action_model(self, step_metrics: dict = None) -> float:
+    def eval_action_model(self, step_metrics: dict | None = None) -> dict:
         """Run simple action-eval on current batch and attach score to metrics."""
+        step_metrics = {} if step_metrics is None else step_metrics
         examples = self._get_next_batch()
         actions = [example["action"] for example in examples]
-        output_dict = _unwrap_model(self.accelerator, self.model).predict_action(
-            examples=examples, use_ddim=True, num_ddim_steps=20
-        )
+        model = _unwrap_model(self.accelerator, self.model)
+        was_training = model.training
+        reset = getattr(model, "reset", None)
+        if callable(reset):
+            reset()
+        model.eval()
+        try:
+            output_dict = model.predict_action(
+                examples=examples, use_ddim=True, num_ddim_steps=20
+            )
+        finally:
+            if callable(reset):
+                reset()
+            model.train(was_training)
 
         if self.accelerator.is_main_process:
             normalized_actions = output_dict["normalized_actions"]
-            actions = np.array(actions)
-            num_pots = np.prod(actions.shape)
-            score = TrainerUtils.euclidean_distance(normalized_actions, actions)
-            step_metrics["mse_score"] = score / num_pots
+            action_horizon = getattr(model, "action_horizon", normalized_actions.shape[1])
+            targets = _align_action_targets(
+                normalized_actions,
+                np.asarray(actions),
+                action_horizon,
+            )
+            step_metrics["mse_score"] = float(
+                np.mean(np.square(normalized_actions - targets))
+            )
 
         del examples
         if dist.is_initialized():
@@ -418,7 +463,9 @@ class VLATrainer(TrainerUtils):
             self.optimizer.zero_grad()
 
             with torch.autocast("cuda", dtype=torch.bfloat16):
-                output_dict = self.model.forward(batch_vla)
+                output_dict = self.model.forward(
+                    batch_vla, training_step=self.completed_steps
+                )
                 action_loss = output_dict["action_loss"]
                 total_loss = action_loss
 

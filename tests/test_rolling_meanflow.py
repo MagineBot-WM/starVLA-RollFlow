@@ -9,6 +9,7 @@ from starVLA.model.modules.action_model.rolling_meanflow_matching_head.rolling_m
     RollFlowConfig,
     StaircaseTimeSampler,
     central_difference_lsd,
+    ot_match,
 )
 
 
@@ -40,8 +41,10 @@ def _config(**overrides):
         "action_dim": 1,
         "chunk_size": 1,
         "finite_difference_delta": 0.01,
-        "train_steps": [2, 4],
         "inference_steps": 4,
+        "p_k1": 1.0,
+        "p_fm": 0.0,
+        "fm_curriculum_steps": 0,
         "w_fm": 1.0,
         "w_lsd": 0.25,
         "use_ot": False,
@@ -51,25 +54,27 @@ def _config(**overrides):
     return RollFlowConfig(**values)
 
 
-def test_staircase_times_are_valid_and_adjacent_for_every_configured_k():
-    sampler = StaircaseTimeSampler(_config(train_steps=[1, 2, 4, 8]))
+def test_training_times_are_valid_for_every_divisor_k():
+    sampler = StaircaseTimeSampler(_config())
 
-    for refinement_steps in (1, 2, 4, 8):
+    for k in (1, 2, 4, 8):
         times = sampler.sample_training(
             5,
             device="cpu",
-            refinement_steps=refinement_steps,
+            p_fm=0.0,
+            num_time_groups=k,
         )
         assert torch.all(times.s >= 0)
         assert torch.all(times.s <= times.t)
         assert torch.all(times.t <= 1)
         assert torch.all(times.t[times.active] + 0.01 <= 1.0 + 1e-6)
-        if refinement_steps > 1:
-            torch.testing.assert_close(
-                times.t[:, 1:refinement_steps],
-                times.s[:, : refinement_steps - 1],
-            )
-        assert int(times.active[:, :, 0].sum(dim=1).min()) == refinement_steps
+        assert times.num_time_groups == k
+        assert times.block_size == 8 // k
+        assert times.ratio.shape == (5, 1, 1)
+        group_width = times.block_size
+        grouped_t = times.t[:, ::group_width, 0]
+        assert torch.all(grouped_t[:, :-1] >= grouped_t[:, 1:])
+        torch.testing.assert_close(times.s, times.ratio * times.t)
 
 
 def test_grouped_training_times_match_32_by_8_design():
@@ -78,50 +83,60 @@ def test_grouped_training_times_match_32_by_8_design():
         action_dim=1,
         chunk_size=8,
         finite_difference_delta=0.01,
-        train_block_sizes=[1, 2, 4],
         inference_steps=4,
     )
     sampler = StaircaseTimeSampler(cfg)
-    lower = torch.zeros(1)
-    upper = torch.ones(1)
-    expected = {
-        1: ([0.75, 0.50, 0.25, 0.00], [1.00, 0.75, 0.50, 0.25]),
-        2: ([0.50, 0.50, 0.00, 0.00], [1.00, 1.00, 0.50, 0.50]),
-        4: ([0.00, 0.00, 0.00, 0.00], [1.00, 1.00, 1.00, 1.00]),
-    }
-
-    for block_size, (expected_s, expected_t) in expected.items():
-        s, t, active = sampler._build_grouped(lower, upper, block_size)
-        torch.testing.assert_close(s[0, ::8, 0], torch.tensor(expected_s))
-        torch.testing.assert_close(t[0, ::8, 0], torch.tensor(expected_t))
-        assert active.all()
-
-        sampled = sampler.sample_training(3, device="cpu", block_size=block_size)
-        assert sampled.block_size == block_size
-        assert sampled.refinement_steps == cfg.num_action_chunks // block_size
-        assert sampled.active.all()
-
-
-def test_train_block_size_and_legacy_train_steps_are_unambiguous():
-    with pytest.raises(ValueError, match="only one"):
-        RollFlowConfig(
-            horizon=32,
-            action_dim=1,
-            chunk_size=8,
-            train_steps=[4],
-            train_block_sizes=[1, 2, 4],
+    for k, block_size in ((1, 4), (2, 2), (4, 1)):
+        sampled = sampler.sample_training(
+            3, device="cpu", p_fm=1.0, num_time_groups=k
         )
+        assert sampled.block_size == block_size
+        assert sampled.num_time_groups == k
+        assert not sampled.active.any()
+        torch.testing.assert_close(sampled.s, sampled.t)
+
+
+def test_k_sampling_probabilities_and_config_validation():
+    generator = torch.Generator().manual_seed(0)
+    sampler = StaircaseTimeSampler(_config(p_k1=0.7))
+    counts = {1: 0, 2: 0, 4: 0, 8: 0}
+    for _ in range(4000):
+        counts[sampler._sample_k(torch.device("cpu"), generator)] += 1
+    assert counts[1] / 4000 == pytest.approx(0.7, abs=0.03)
+    for k in (2, 4, 8):
+        assert counts[k] / 4000 == pytest.approx(0.1, abs=0.025)
+    with pytest.raises(ValueError, match="p_fm"):
+        _config(p_fm=1.1)
+
+
+def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():
+    torch.manual_seed(0)
+    rollflow = RollFlow(_config(p_fm=0.2, fm_curriculum_steps=100))
+    model = _LearnableConstant()
+    actions = torch.randn(32, 8, 1)
+
+    _, start = rollflow.loss(model, actions, step=0)
+    assert start["p_fm"] == 1.0
+    assert start["fm_only_frac"] == 1.0
+    assert start["active_lsd_frac"] == 0.0
+    assert model.batch_sizes == [32]
+
+    _, middle = rollflow.loss(model, actions, step=50)
+    _, end = rollflow.loss(model, actions, step=100)
+    assert middle["p_fm"] == pytest.approx(0.6)
+    assert end["p_fm"] == pytest.approx(0.2)
 
 
 def test_linear_path_oracle_has_zero_fm_and_lsd_error():
     torch.manual_seed(0)
-    cfg = _config(train_steps=[4])
+    cfg = _config()
     x0 = torch.randn(3, cfg.horizon, cfg.action_dim)
     x1 = torch.randn_like(x0)
     times = StaircaseTimeSampler(cfg).sample_training(
         x0.shape[0],
         device=x0.device,
-        refinement_steps=4,
+        p_fm=0.0,
+        num_time_groups=4,
     )
 
     loss, stats = central_difference_lsd(
@@ -144,7 +159,7 @@ def test_linear_path_oracle_has_zero_fm_and_lsd_error():
 
 def test_loss_retains_gradients_only_for_tangent_and_local_paths():
     torch.manual_seed(0)
-    rollflow = RollFlow(_config(train_steps=[2]))
+    rollflow = RollFlow(_config())
     model = _LearnableConstant()
     actions = torch.randn(3, 8, 1)
 
@@ -157,9 +172,71 @@ def test_loss_retains_gradients_only_for_tangent_and_local_paths():
     assert torch.isfinite(model.value.grad)
 
 
+def test_mixed_fm_batch_runs_lsd_only_for_active_rows():
+    model = _LearnableConstant()
+    x0 = torch.randn(4, 8, 1)
+    x1 = torch.randn_like(x0)
+    t = torch.full((4, 8, 1), 0.6)
+    s = t.clone()
+    s[[1, 3]] = 0.2
+
+    loss, stats = central_difference_lsd(
+        model,
+        x0,
+        x1,
+        s,
+        t,
+        delta=0.01,
+    )
+    loss.backward()
+
+    assert model.batch_sizes == [2, 2, 8]
+    assert model.grad_enabled == [False, False, True]
+    assert stats["active_lsd_frac"] == 0.5
+
+
+def test_padded_rows_are_excluded_from_lsd_forwards():
+    model = _LearnableConstant()
+    x0 = torch.randn(4, 8, 1)
+    x1 = torch.randn_like(x0)
+    t = torch.full((4, 8, 1), 0.6)
+    s = t.clone()
+    s[[1, 3]] = 0.2
+    pad = torch.zeros(4, 8, dtype=torch.bool)
+    pad[3] = True
+
+    loss, stats = central_difference_lsd(
+        model,
+        x0,
+        x1,
+        s,
+        t,
+        delta=0.01,
+        pad=pad,
+    )
+    loss.backward()
+
+    assert model.batch_sizes == [1, 1, 6]
+    assert stats["active_lsd_frac"] == 0.25
+
+
+def test_training_input_shapes_are_checked():
+    x0 = torch.randn(2, 8, 1)
+    x1 = torch.randn_like(x0)
+    times = torch.zeros(2, 8, 1)
+    with pytest.raises(ValueError, match="x0 and x1"):
+        central_difference_lsd(
+            _LearnableConstant(), x0, x1[:, :-1], times, times, delta=0.01
+        )
+    with pytest.raises(ValueError, match="s and t"):
+        central_difference_lsd(
+            _LearnableConstant(), x0, x1, times.squeeze(-1), times.squeeze(-1), delta=0.01
+        )
+
+
 def test_all_padding_returns_graph_connected_zero():
     torch.manual_seed(0)
-    rollflow = RollFlow(_config(train_steps=[2]))
+    rollflow = RollFlow(_config())
     model = _LearnableConstant()
     actions = torch.randn(2, 8, 1)
     padding = torch.ones(2, 8, dtype=torch.bool)
@@ -170,6 +247,17 @@ def test_all_padding_returns_graph_connected_zero():
     assert loss.item() == 0.0
     assert model.value.grad is not None
     assert model.value.grad.item() == 0.0
+    assert model.batch_sizes == [2]
+
+
+def test_ot_matching_ignores_padded_target_values():
+    x1 = torch.tensor([[[0.0], [1000.0]], [[10.0], [-1000.0]]])
+    x0 = torch.tensor([[[0.0], [-1000.0]], [[10.0], [1000.0]]])
+    pad = torch.tensor([[False, True], [False, True]])
+
+    matched = ot_match(x1, x0, pad=pad)
+
+    torch.testing.assert_close(matched, x0)
 
 
 def test_oracle_rolls_sine_from_minus_20pi_to_plus_20pi():

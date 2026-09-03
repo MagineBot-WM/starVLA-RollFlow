@@ -2,23 +2,23 @@
 
 Core training algorithm
 -----------------------
-    s, t = sample_staircase_times(delta)
+    s, t = sample_training_times()
     x_s = (1-s) * x0 + s * x1
     x_t = (1-t) * x0 + t * x1
     v_gt = x1 - x0
 
-    # Build the complete stop-gradient teacher path first.
+    # Build the stop-gradient teacher path for LSD rows first.
     with no_grad:
         V_st = model(x_s, s, t)
         X_t_hat = x_s + (t-s) * V_st
         v_teacher = model(X_t_hat, t, t)
 
-    # Pack every gradient-bearing prediction into one forward.
+    # Pack tangent endpoints for LSD rows and local FM for the full batch.
     V_minus, V_plus, v_local = model(
         cat(x_s, x_s, x_t),
         cat(s, s, t),
         cat(t-delta, t+delta, t),
-    ).chunk(3)
+    ).split(B_lsd, B_lsd, B)
     X_minus = x_s + (t-delta-s) * V_minus
     X_plus  = x_s + (t+delta-s) * V_plus
     v_tangent = (X_plus - X_minus) / (2*delta)
@@ -31,14 +31,34 @@ Time convention
 ---------------
     x0 = Gaussian prior at flow time 0
     x1 = clean action trajectory at flow time 1
+    s = source time
+    t = terminal time
     X_{s,t}(z) = z + (t-s) * u_theta(z,s,t),  s <= t
+Time sampling
+-------------
+    Input: horizon H, chunk size C, probabilities p_k1, p_fm
 
-Training uses a random RollFlow staircase.  With horizon H and execution chunk
-size C, M = H/C action chunks exist.  ``train_block_sizes`` controls how many
-adjacent action chunks share one flow interval.  A block size of M gives the
-ordinary FM time layout (one source/target time for the whole horizon), while a
-block size of 1 gives the full M-level rolling staircase.  The legacy
-``train_steps`` refinement-depth sampler remains available for old experiments.
+    1. Temporal refinement:
+        M = H / C, K ∈ Div(M)
+        P(K=1)=p_k1, P(K>1)=(1-p_k1)/(#K-1)
+        Sample K
+
+    2. Ordered time sampling:
+        Sample: t_i ~ U(0,1)
+        Sort: t_1 > t_2 > ... > t_K
+
+    3. Interval sampling:
+        Sample: ratio ~ p_fm·δ(1)+(1-p_fm)·U(0,1)
+
+    4. Construct:
+        s_i = ratio * t_i
+
+Training samples K from the divisors of M=H/C.  K=1 is favoured, while the
+remaining choices share the residual probability.  K independently sorted
+target times are expanded over equal action blocks, and one source ratio per
+sample gives s=ratio*t.  An FM-only curriculum starts with s=t and anneals to
+the configured mixture probability.  Deployment still uses the exact rolling
+staircase needed for cache alignment.
 
 There is no JVP, CSF, Split loss, persistent training cache, or adjacent-window
 training sampler.  Rolling state exists only at inference.
@@ -47,7 +67,7 @@ training sampler.  Rolling state exists only at inference.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 import torch
 from torch import Tensor, nn
@@ -64,9 +84,11 @@ class RollFlowConfig:
     chunk_size: int
 
     finite_difference_delta: float = 0.01
-    train_steps: Optional[Sequence[int]] = None
-    train_block_sizes: Optional[Sequence[int]] = None
     inference_steps: Optional[int] = None
+
+    p_k1: float = 0.7
+    p_fm: float = 0.3
+    fm_curriculum_steps: int = 5000
 
     w_fm: float = 1.0
     w_lsd: float = 0.5
@@ -87,63 +109,21 @@ class RollFlowConfig:
             raise ValueError("loss weights must be non-negative")
         if self.clip_velocity < 0:
             raise ValueError("clip_velocity must be non-negative")
-
-        if self.train_steps is not None and self.train_block_sizes is not None:
-            raise ValueError("set only one of train_steps and train_block_sizes")
-
-        block_sizes = self.resolved_train_block_sizes
-        if block_sizes is None:
-            steps = self.resolved_train_steps
-            if not steps or any(not self.valid_steps(k) for k in steps):
-                raise ValueError(f"train_steps must lie in [1,{self.num_action_chunks}]")
-            if len(set(steps)) != len(steps):
-                raise ValueError("train_steps must not contain duplicates")
-            max_levels = max(steps)
-            interval_name = "train_steps"
-        else:
-            if not block_sizes or any(
-                size <= 0 or self.num_action_chunks % size for size in block_sizes
-            ):
-                raise ValueError(
-                    "train_block_sizes must be positive divisors of "
-                    f"num_action_chunks={self.num_action_chunks}"
-                )
-            if len(set(block_sizes)) != len(block_sizes):
-                raise ValueError("train_block_sizes must not contain duplicates")
-            max_levels = max(self.num_action_chunks // size for size in block_sizes)
-            interval_name = "train_block_sizes"
+        if not 0.0 <= self.p_k1 <= 1.0:
+            raise ValueError("p_k1 must lie in [0, 1]")
+        if not 0.0 <= self.p_fm <= 1.0:
+            raise ValueError("p_fm must lie in [0, 1]")
+        if self.fm_curriculum_steps < 0:
+            raise ValueError("fm_curriculum_steps must be non-negative")
 
         if not self.valid_steps(self.resolved_inference_steps):
             raise ValueError(
                 f"inference_steps must lie in [1,{self.num_action_chunks}]"
             )
 
-        # A K-level central-difference staircase needs K intervals, each wider
-        # than delta, and delta room above the largest terminal time.  Keep this
-        # check identical to the bounds used by ``sample_training`` so an
-        # accepted config cannot fail only when the first batch is sampled.
-        eps = max(1e-6, self.finite_difference_delta * 1e-3)
-        if max_levels * (self.finite_difference_delta + eps) >= 1.0 - self.finite_difference_delta:
-            raise ValueError(
-                "finite_difference_delta is too large for the requested "
-                f"{interval_name}"
-            )
-
     @property
     def num_action_chunks(self) -> int:
         return self.horizon // self.chunk_size
-
-    @property
-    def resolved_train_steps(self) -> tuple[int, ...]:
-        if self.train_steps is None:
-            return tuple(range(1, self.num_action_chunks + 1))
-        return tuple(int(k) for k in self.train_steps)
-
-    @property
-    def resolved_train_block_sizes(self) -> Optional[tuple[int, ...]]:
-        if self.train_block_sizes is None:
-            return None
-        return tuple(int(size) for size in self.train_block_sizes)
 
     @property
     def resolved_inference_steps(self) -> int:
@@ -158,6 +138,17 @@ class RollFlowConfig:
 
 
 @dataclass(frozen=True)
+class TrainingTimes:
+    s: Tensor
+    t: Tensor
+    active: Tensor
+    num_time_groups: int
+    block_size: int
+    ratio: Tensor
+    fm_mask: Tensor
+
+
+@dataclass(frozen=True)
 class StaircaseTimes:
     s: Tensor
     t: Tensor
@@ -165,7 +156,6 @@ class StaircaseTimes:
     refinement_steps: int
     lower: Tensor
     upper: Tensor
-    block_size: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -187,6 +177,31 @@ def lerp_path(x0: Tensor, x1: Tensor, time: Tensor) -> Tensor:
 
 def flow_map(x_s: Tensor, s: Tensor, t: Tensor, velocity: Tensor) -> Tensor:
     return x_s.float() + (t - s).float() * velocity.float()
+
+
+def _flow_matching_objective(
+    model: nn.Module,
+    x_t: Tensor,
+    t: Tensor,
+    v_gt: Tensor,
+    *,
+    context: Optional[Tensor],
+    pad: Optional[Tensor],
+    weight: float,
+    model_kwargs: dict[str, Any],
+) -> tuple[Tensor, dict[str, Tensor]]:
+    """Compute the ordinary FM objective without constructing LSD branches."""
+    v_local = _predict(model, x_t, t, t, context, model_kwargs)
+    fm_loss = masked_mse(v_local - v_gt, pad=pad)
+    zero = fm_loss.detach().new_zeros(())
+    return weight * fm_loss, {
+        "fm_loss": fm_loss.detach(),
+        "lsd_loss": zero,
+        "active_lsd_frac": zero,
+        "v_local_abs": v_local.detach().abs().mean(),
+        "v_tangent_abs": zero,
+        "v_teacher_abs": zero,
+    }
 
 
 def central_difference_lsd(
@@ -214,16 +229,48 @@ def central_difference_lsd(
     kwargs = {} if model_kwargs is None else model_kwargs
     delta = float(delta)
     active = _lsd_mask(s, t, delta) if active is None else active.bool()
+    _validate_training_inputs(x0, x1, s, t, active, pad)
     _validate_times(s, t, delta, active)
+
+    # Padding is a loss concern, not a property of the sampled time pair.
+    # Removing it here also prevents fully padded rows from entering any of
+    # the expensive teacher/tangent branches.
+    loss_active = active
+    if pad is not None:
+        loss_active = active & ~pad.bool().unsqueeze(-1)
 
     x_s = lerp_path(x0, x1, s)
     x_t = lerp_path(x0, x1, t)
     v_gt = x1.float() - x0.float()
 
-    # Diagonal tokens are not used by LSD. Keep their queries diagonal instead
-    # of creating invalid backward maps with t-delta < s.
-    t_minus = torch.where(active, t - delta, t)
-    t_plus = torch.where(active, t + delta, t)
+    # At the start of the curriculum every token is diagonal, so this is
+    # exactly ordinary flow matching and needs only one model forward.
+    if not bool(loss_active.any()):
+        return _flow_matching_objective(
+            model,
+            x_t,
+            t,
+            v_gt,
+            context=context,
+            pad=pad,
+            weight=w_fm,
+            model_kwargs=kwargs,
+        )
+
+    # Exclude FM-only samples from every teacher and tangent forward. Local FM
+    # still sees the complete batch.
+    lsd_rows = loss_active.flatten(1).any(dim=1)
+    x_s_lsd = x_s[lsd_rows]
+    s_lsd = s[lsd_rows]
+    t_lsd = t[lsd_rows]
+    active_lsd = loss_active[lsd_rows]
+    context_lsd = select_batch(context, lsd_rows, x0.shape[0])
+    kwargs_lsd = select_batch(kwargs, lsd_rows, x0.shape[0])
+
+    # Inactive tokens inside an LSD sample stay diagonal instead of creating
+    # invalid backward maps with t-delta < s.
+    t_minus = torch.where(active_lsd, t_lsd - delta, t_lsd)
+    t_plus = torch.where(active_lsd, t_lsd + delta, t_lsd)
 
     # -------------------------------------------------------------------------
     # 1. Inference-only self-teacher path
@@ -231,34 +278,39 @@ def central_difference_lsd(
     # Compute this path before constructing the student graph so its temporary
     # activations are released immediately.
     with torch.no_grad():
-        V_st = _predict(model, x_s, s, t, context, kwargs)
-        X_t_hat = flow_map(x_s, s, t, V_st)
-        v_teacher = _predict(model, X_t_hat, t, t, context, kwargs)
+        V_st = _predict(model, x_s_lsd, s_lsd, t_lsd, context_lsd, kwargs_lsd)
+        X_t_hat = flow_map(x_s_lsd, s_lsd, t_lsd, V_st)
+        v_teacher = _predict(model, X_t_hat, t_lsd, t_lsd, context_lsd, kwargs_lsd)
 
     # -------------------------------------------------------------------------
     # 2. Gradient-bearing tangent endpoints + local FM prediction
     # -------------------------------------------------------------------------
-    # Packing all three student predictions keeps the retained graph at 3B
-    # while reducing the total number of model calls from four to three.
+    # Pack 2*B_lsd tangent predictions with the B-sized local FM prediction.
+    # This retains less graph memory than an unconditional 3B forward.
     V_minus, V_plus, v_local = _parallel_student_predictions(
-        model, x_s, x_t, s, t, t_minus, t_plus, context, kwargs
+        model, x_s, x_t, s, t, t_minus, t_plus, context, kwargs, lsd_rows
     )
 
-    X_minus = flow_map(x_s, s, t_minus, V_minus)
-    X_plus = flow_map(x_s, s, t_plus, V_plus)
+    X_minus = flow_map(x_s_lsd, s_lsd, t_minus, V_minus)
+    X_plus = flow_map(x_s_lsd, s_lsd, t_plus, V_plus)
     v_tangent = (X_plus - X_minus) / (2.0 * delta)
 
     loss_fm = masked_mse(v_local - v_gt, pad=pad)
-    loss_lsd = masked_mse(v_tangent - v_teacher, pad=pad, valid=active)
+    pad_lsd = None if pad is None else pad[lsd_rows]
+    loss_lsd = masked_mse(
+        v_tangent - v_teacher,
+        pad=pad_lsd,
+        valid=active_lsd,
+    )
     loss = w_fm * loss_fm + w_lsd * loss_lsd
 
     return loss, {
         "fm_loss": loss_fm.detach(),
         "lsd_loss": loss_lsd.detach(),
-        "active_lsd_frac": active.float().mean().detach(),
+        "active_lsd_frac": loss_active.float().mean().detach(),
         "v_local_abs": v_local.detach().abs().mean(),
-        "v_tangent_abs": v_tangent.detach().abs().mean(),
-        "v_teacher_abs": v_teacher.abs().mean(),
+        "v_tangent_abs": masked_mean(v_tangent.detach().abs(), active_lsd),
+        "v_teacher_abs": masked_mean(v_teacher.abs(), active_lsd),
     }
 
 
@@ -268,19 +320,14 @@ def central_difference_lsd(
 
 
 class StaircaseTimeSampler:
-    """Grouped random training times + exact deployment staircase.
+    """Random grouped training times + exact deployment staircase.
 
-    During training, a block size G makes each group of G action chunks share
-    one interval.  For L=M/G levels, chunk j uses ``level=floor(j/G)`` and
+    Training samples K from the divisors of M=H/C.  K=1 has probability
+    ``p_k1`` and every other divisor shares the remaining mass.  The K sorted
+    target times are expanded over equal contiguous action blocks.  Each sample
+    uses one ratio for all groups, s=ratio*t; FM-only samples use ratio=1.
 
-        t_j = T - level/L     * (T-R)
-        s_j = T - (level+1)/L * (T-R)
-
-    Thus G=M is the ordinary whole-horizon FM time layout, and G=1 is the full
-    rolling staircase.
-
-    Deployment retains the refinement-depth K layout required for exact cache
-    alignment after shifting one execution chunk:
+    Deployment retains the K-level layout required for cache alignment:
 
     For a sampled interval [R,T] and K refinement levels, chunk j uses
 
@@ -297,10 +344,9 @@ class StaircaseTimeSampler:
 
     def __init__(self, cfg: RollFlowConfig):
         self.cfg = cfg
-        self._steps = torch.tensor(cfg.resolved_train_steps, dtype=torch.long)
-        block_sizes = cfg.resolved_train_block_sizes
-        self._block_sizes = (
-            None if block_sizes is None else torch.tensor(block_sizes, dtype=torch.long)
+        self._train_ks = torch.tensor(
+            [k for k in range(1, cfg.num_action_chunks + 1) if cfg.num_action_chunks % k == 0],
+            dtype=torch.long,
         )
 
     def sample_training(
@@ -310,63 +356,46 @@ class StaircaseTimeSampler:
         device,
         dtype=torch.float32,
         generator=None,
-        refinement_steps: Optional[int] = None,
-        block_size: Optional[int] = None,
-    ) -> StaircaseTimes:
+        p_fm: Optional[float] = None,
+        num_time_groups: Optional[int] = None,
+    ) -> TrainingTimes:
         if batch <= 0:
             raise ValueError("batch must be positive")
-        if refinement_steps is not None and block_size is not None:
-            raise ValueError("set only one of refinement_steps and block_size")
-        if self._block_sizes is not None and refinement_steps is not None:
-            raise ValueError("grouped training uses block_size, not refinement_steps")
         device = torch.device(device)
+        p_fm = self.cfg.p_fm if p_fm is None else float(p_fm)
+        if not 0.0 <= p_fm <= 1.0:
+            raise ValueError("p_fm must lie in [0, 1]")
 
-        grouped = block_size is not None or self._block_sizes is not None
-        if grouped:
-            G = (
-                self._sample_value(self._block_sizes, device, generator)
-                if block_size is None
-                else int(block_size)
-            )
-            if G <= 0 or self.cfg.num_action_chunks % G:
-                raise ValueError(
-                    "block_size must be a positive divisor of "
-                    f"num_action_chunks={self.cfg.num_action_chunks}"
-                )
-            levels = self.cfg.num_action_chunks // G
+        if num_time_groups is None:
+            K = self._sample_k(device, generator)
         else:
-            G = None
-            levels = (
-                self._sample_value(self._steps, device, generator)
-                if refinement_steps is None
-                else int(refinement_steps)
-            )
-            if not self.cfg.valid_steps(levels):
-                raise ValueError(
-                    f"refinement_steps must lie in [1,{self.cfg.num_action_chunks}]"
-                )
+            K = int(num_time_groups)
+            if K not in self._train_ks.tolist():
+                raise ValueError(f"num_time_groups must divide {self.cfg.num_action_chunks}")
 
-        delta = self.cfg.finite_difference_delta
-        eps = max(1e-6, delta * 1e-3)
-        min_gap = levels * (delta + eps)
-        max_gap = 1.0 - delta
-        if min_gap >= max_gap:
-            raise ValueError("no valid central-difference interval for these training times")
+        t_group = torch.sort(
+            torch.rand(batch, K, 1, device=device, dtype=dtype, generator=generator),
+            dim=1,
+            descending=True,
+        ).values
+        ratio = torch.rand(batch, 1, 1, device=device, dtype=dtype, generator=generator)
+        fm_mask = torch.rand(batch, 1, 1, device=device, generator=generator) < p_fm
+        ratio = torch.where(fm_mask, torch.ones_like(ratio), ratio)
+        s_group = ratio * t_group
 
-        # Random global interval [R,T], with enough width for every adjacent,
-        # central-difference-valid subinterval and delta room above T.
-        gap = torch.empty(batch, device=device, dtype=dtype).uniform_(
-            min_gap, max_gap, generator=generator
+        repeats = (self.cfg.num_action_chunks // K) * self.cfg.chunk_size
+        s = s_group.repeat_interleave(repeats, dim=1)
+        t = t_group.repeat_interleave(repeats, dim=1)
+        active = _lsd_mask(s, t, self.cfg.finite_difference_delta)
+        return TrainingTimes(
+            s,
+            t,
+            active,
+            K,
+            self.cfg.num_action_chunks // K,
+            ratio,
+            fm_mask,
         )
-        lower = torch.rand(batch, device=device, dtype=dtype, generator=generator)
-        lower = lower * (1.0 - delta - gap)
-        upper = lower + gap
-
-        if G is None:
-            s, t, active = self._build(lower, upper, levels)
-        else:
-            s, t, active = self._build_grouped(lower, upper, G)
-        return StaircaseTimes(s, t, active, levels, lower, upper, G)
 
     def deployment(
         self,
@@ -391,16 +420,18 @@ class StaircaseTimeSampler:
             active = t > 0
         return StaircaseTimes(s, t, active, K, lower, upper)
 
-    @staticmethod
-    def _sample_value(values, device, generator) -> int:
-        if values is None:
-            raise ValueError("no configured training values to sample")
-        idx = int(
-            torch.randint(
-                len(values), (), device=device, generator=generator
-            ).item()
+    def _sample_k(self, device, generator) -> int:
+        ks = self._train_ks.to(device=device)
+        if len(ks) == 1:
+            return 1
+        probs = torch.full(
+            (len(ks),),
+            (1.0 - self.cfg.p_k1) / (len(ks) - 1),
+            device=device,
         )
-        return int(values[idx])
+        probs[0] = self.cfg.p_k1
+        index = torch.multinomial(probs, 1, generator=generator)
+        return int(ks[index].item())
 
     def _build(
         self, lower: Tensor, upper: Tensor, K: int
@@ -420,32 +451,14 @@ class StaircaseTimeSampler:
         active = (t - s) > self.cfg.finite_difference_delta
         return s, t, active
 
-    def _build_grouped(
-        self, lower: Tensor, upper: Tensor, block_size: int
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        cfg = self.cfg
-        levels = cfg.num_action_chunks // block_size
-        chunk = torch.arange(
-            cfg.num_action_chunks, device=lower.device, dtype=lower.dtype
-        )
-        level = torch.floor(chunk / block_size)
-        gap = (upper - lower)[:, None]
-
-        t_chunk = upper[:, None] - gap * (level / levels)[None, :]
-        s_chunk = upper[:, None] - gap * ((level + 1.0) / levels)[None, :]
-        t = t_chunk.repeat_interleave(cfg.chunk_size, dim=1).unsqueeze(-1)
-        s = s_chunk.repeat_interleave(cfg.chunk_size, dim=1).unsqueeze(-1)
-        active = (t - s) > cfg.finite_difference_delta
-        return s, t, active
-
-
 # =============================================================================
 # 4. Engineering helpers
 # =============================================================================
 
 
 def _lsd_mask(s: Tensor, t: Tensor, delta: float) -> Tensor:
-    return (t - s) > float(delta)
+    delta = float(delta)
+    return ((t - s) > delta + 1e-6) & (t + delta <= 1.0 + 1e-6)
 
 
 def _validate_times(s: Tensor, t: Tensor, delta: float, active: Tensor) -> None:
@@ -458,6 +471,25 @@ def _validate_times(s: Tensor, t: Tensor, delta: float, active: Tensor) -> None:
         raise ValueError("active LSD tokens require s < t-delta")
     if bool((active & (t + delta > 1.0 + tol)).any()):
         raise ValueError("active LSD tokens require t+delta <= 1")
+
+
+def _validate_training_inputs(
+    x0: Tensor,
+    x1: Tensor,
+    s: Tensor,
+    t: Tensor,
+    active: Tensor,
+    pad: Optional[Tensor],
+) -> None:
+    if x0.shape != x1.shape or x0.ndim != 3:
+        raise ValueError("x0 and x1 must have identical [B,H,A] shapes")
+    expected_times = (*x0.shape[:2], 1)
+    if s.shape != expected_times or t.shape != expected_times:
+        raise ValueError(f"s and t must have shape {expected_times}")
+    if active.shape != expected_times:
+        raise ValueError(f"active must have shape {expected_times}")
+    if pad is not None and pad.shape != x0.shape[:2]:
+        raise ValueError(f"pad must have shape {tuple(x0.shape[:2])}")
 
 
 def _predict(
@@ -484,31 +516,54 @@ def _parallel_student_predictions(
     t_plus,
     context,
     kwargs,
+    lsd_rows,
 ):
     B = x_s.shape[0]
+    B_lsd = t_minus.shape[0]
     out = _predict(
         model,
-        torch.cat((x_s, x_s, x_t), dim=0),
-        torch.cat((s, s, t), dim=0),
+        torch.cat((x_s[lsd_rows], x_s[lsd_rows], x_t), dim=0),
+        torch.cat((s[lsd_rows], s[lsd_rows], t), dim=0),
         torch.cat((t_minus, t_plus, t), dim=0),
-        repeat_batch(context, 3, B),
-        repeat_batch(kwargs, 3, B),
+        merge_lsd_and_full_batch(context, lsd_rows, B),
+        merge_lsd_and_full_batch(kwargs, lsd_rows, B),
     )
-    return out.chunk(3, dim=0)
+    return out.split((B_lsd, B_lsd, B), dim=0)
 
 
-def repeat_batch(value: Any, repeats: int, batch: int) -> Any:
-    """Repeat batch-aligned tensors recursively; leave constants unchanged."""
+def select_batch(value: Any, rows: Tensor, batch: int) -> Any:
+    """Select batch-aligned tensors recursively; leave constants unchanged."""
     if value is None:
         return None
     if torch.is_tensor(value):
-        return torch.cat([value] * repeats, dim=0) if value.ndim and value.shape[0] == batch else value
+        return value[rows] if value.ndim and value.shape[0] == batch else value
     if isinstance(value, dict):
-        return {k: repeat_batch(v, repeats, batch) for k, v in value.items()}
+        return {key: select_batch(item, rows, batch) for key, item in value.items()}
     if isinstance(value, tuple):
-        return tuple(repeat_batch(v, repeats, batch) for v in value)
+        return tuple(select_batch(item, rows, batch) for item in value)
     if isinstance(value, list):
-        return [repeat_batch(v, repeats, batch) for v in value]
+        return [select_batch(item, rows, batch) for item in value]
+    return value
+
+
+def merge_lsd_and_full_batch(value: Any, rows: Tensor, batch: int) -> Any:
+    """Build the [LSD-, LSD+, full-FM] batch recursively."""
+    if value is None:
+        return None
+    if torch.is_tensor(value):
+        if value.ndim and value.shape[0] == batch:
+            selected = value[rows]
+            return torch.cat((selected, selected, value), dim=0)
+        return value
+    if isinstance(value, dict):
+        return {
+            key: merge_lsd_and_full_batch(item, rows, batch)
+            for key, item in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(merge_lsd_and_full_batch(item, rows, batch) for item in value)
+    if isinstance(value, list):
+        return [merge_lsd_and_full_batch(item, rows, batch) for item in value]
     return value
 
 
@@ -532,13 +587,31 @@ def masked_mse(
     return loss[mask].mean()
 
 
+def masked_mean(value: Tensor, valid: Tensor) -> Tensor:
+    """Mean over valid action tokens and all feature dimensions."""
+    mask = valid.expand_as(value).bool()
+    return value[mask].mean() if bool(mask.any()) else value.new_zeros(())
+
+
 @torch.no_grad()
-def ot_match(x1: Tensor, x0: Tensor) -> Tensor:
+def ot_match(x1: Tensor, x0: Tensor, pad: Optional[Tensor] = None) -> Tensor:
+    """Match noise to targets, excluding padded target timesteps from cost."""
+    if x1.shape != x0.shape or x1.ndim != 3:
+        raise ValueError("x1 and x0 must have identical [B,H,A] shapes")
+    if pad is not None and pad.shape != x1.shape[:2]:
+        raise ValueError(f"pad must have shape {tuple(x1.shape[:2])}")
     if x1.shape[0] <= 1:
         return x0
     from scipy.optimize import linear_sum_assignment
 
-    cost = torch.cdist(x1.float().flatten(1), x0.float().flatten(1)).cpu()
+    if pad is None or not bool(pad.any()):
+        cost = torch.cdist(x1.float().flatten(1), x0.float().flatten(1))
+    else:
+        valid = (~pad.bool()).float().unsqueeze(-1)
+        squared_error = (x1.float()[:, None] - x0.float()[None, :]).square()
+        valid_dims = valid.sum(dim=(1, 2)).clamp_min(1) * x1.shape[-1]
+        cost = (squared_error * valid[:, None]).sum(dim=(-2, -1)) / valid_dims[:, None]
+    cost = cost.cpu()
     row, col = linear_sum_assignment(cost.numpy())
     row = torch.as_tensor(row, device=x0.device)
     col = torch.as_tensor(col, device=x0.device)
@@ -587,7 +660,6 @@ class RollFlow:
         pad: Optional[Tensor] = None,
         **model_kwargs,
     ) -> tuple[Tensor, dict[str, Any]]:
-        del step  # API compatibility only; training is stationary.
         self._check_actions(x)
         cfg = self.cfg
         B = x.shape[0]
@@ -597,9 +669,12 @@ class RollFlow:
         x1 = x
         x0 = torch.randn_like(x1)
         if cfg.use_ot:
-            x0 = ot_match(x1, x0)
+            x0 = ot_match(x1, x0, pad=pad)
 
-        times = self.time.sample_training(B, device=x.device)
+        curriculum = cfg.fm_curriculum_steps
+        progress = 1.0 if curriculum == 0 else min(max(step, 0) / curriculum, 1.0)
+        p_fm = 1.0 - progress * (1.0 - cfg.p_fm)
+        times = self.time.sample_training(B, device=x.device, p_fm=p_fm)
         loss, stats = central_difference_lsd(
             model,
             x0,
@@ -620,15 +695,17 @@ class RollFlow:
             "fm_loss": float(stats["fm_loss"].cpu()),
             "lsd_loss": float(stats["lsd_loss"].cpu()),
             "active_lsd_frac": float(stats["active_lsd_frac"].cpu()),
-            "refinement_steps": times.refinement_steps,
-            "num_time_levels": times.refinement_steps,
+            "num_time_groups": times.num_time_groups,
             "train_block_size": times.block_size,
-            "interval_lower": float(times.lower.mean().cpu()),
-            "interval_upper": float(times.upper.mean().cpu()),
+            "p_fm": p_fm,
+            "fm_only_frac": float(times.fm_mask.float().mean().cpu()),
+            "source_ratio": float(times.ratio.mean().cpu()),
             "s_min": float(times.s.min().cpu()),
             "s_max": float(times.s.max().cpu()),
+            "s_mean": float(times.s.mean().cpu()),
             "t_min": float(times.t.min().cpu()),
             "t_max": float(times.t.max().cpu()),
+            "t_mean": float(times.t.mean().cpu()),
             "use_ot": bool(cfg.use_ot),
         }
 

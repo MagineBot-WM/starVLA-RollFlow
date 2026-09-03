@@ -1,7 +1,7 @@
 # Copyright 2025 NVIDIA Corp. and affiliates. All rights reserved.
 # Modified for starVLA RollFlow integration.
 
-from typing import Optional, Sequence
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -48,9 +48,10 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         num_timestep_buckets: int = 1000,
         num_target_vision_tokens: int = 32,
         finite_difference_delta: float = 0.01,
-        train_steps: Optional[Sequence[int]] = None,
-        train_block_sizes: Optional[Sequence[int]] = None,
         inference_steps: Optional[int] = None,
+        p_k1: float = 0.7,
+        p_fm: float = 0.3,
+        fm_curriculum_steps: int = 5000,
         w_fm: float = 1.0,
         w_lsd: float = 0.5,
         use_ot: bool = True,
@@ -72,9 +73,10 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         self.num_timestep_buckets = num_timestep_buckets
         self.num_target_vision_tokens = num_target_vision_tokens
         self.finite_difference_delta = finite_difference_delta
-        self.train_steps = train_steps
-        self.train_block_sizes = train_block_sizes
         self.inference_steps = inference_steps
+        self.p_k1 = p_k1
+        self.p_fm = p_fm
+        self.fm_curriculum_steps = fm_curriculum_steps
         self.w_fm = w_fm
         self.w_lsd = w_lsd
         self.use_ot = use_ot
@@ -151,11 +153,14 @@ class RollFlowActionHead(nn.Module):
                 finite_difference_delta=float(
                     _first_config_value(config, ("finite_difference_delta",), 0.01)
                 ),
-                train_steps=_first_config_value(config, ("train_steps",)),
-                train_block_sizes=_first_config_value(config, ("train_block_sizes",)),
                 inference_steps=_first_config_value(
                     config,
                     ("inference_steps", "num_inference_timesteps"),
+                ),
+                p_k1=float(_first_config_value(config, ("p_k1",), 0.7)),
+                p_fm=float(_first_config_value(config, ("p_fm",), 0.3)),
+                fm_curriculum_steps=int(
+                    _first_config_value(config, ("fm_curriculum_steps",), 5000)
                 ),
                 w_fm=float(_first_config_value(config, ("w_fm",), 1.0)),
                 w_lsd=float(_first_config_value(config, ("w_lsd",), 0.5)),
@@ -181,6 +186,7 @@ class RollFlowActionHead(nn.Module):
         state: Optional[torch.Tensor] = None,
         encoder_attention_mask=None,
         action_padding_mask: Optional[torch.Tensor] = None,
+        training_step: int = 0,
     ) -> torch.Tensor:
         """Return the scalar RollFlow objective for actions shaped ``[B,H,A]``."""
         if action_padding_mask is not None:
@@ -189,6 +195,7 @@ class RollFlowActionHead(nn.Module):
         loss, self.last_loss_stats = self.rollflow.loss(
             self._predict_velocity,
             actions,
+            step=training_step,
             context=vl_embs,
             pad=action_padding_mask,
             state_features=state_features,

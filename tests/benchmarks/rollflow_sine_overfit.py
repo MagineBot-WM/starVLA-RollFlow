@@ -43,7 +43,9 @@ def make_config() -> SimpleNamespace:
         num_target_vision_tokens=2,
         num_timestep_buckets=1000,
         finite_difference_delta=0.01,
-        train_block_sizes=[1, 2, 4],
+        p_k1=0.7,
+        p_fm=0.3,
+        fm_curriculum_steps=200,
         inference_steps=4,
         w_fm=1.0,
         w_lsd=0.25,
@@ -185,7 +187,7 @@ def main() -> None:
         actions = actions.repeat(args.repeats, 1, 1)
 
         optimizer.zero_grad(set_to_none=True)
-        loss = model(context, actions)
+        loss = model(context, actions, training_step=step)
         if not torch.isfinite(loss):
             raise RuntimeError(f"non-finite loss at step {step}: {loss.item()}")
         loss.backward()
@@ -199,7 +201,7 @@ def main() -> None:
             print(
                 f"step={step:04d} loss={last_loss:.6f} "
                 f"fm={stats['fm_loss']:.6f} lsd={stats['lsd_loss']:.6f} "
-                f"G={stats['train_block_size']} levels={stats['num_time_levels']}"
+                f"G={stats['train_block_size']} groups={stats['num_time_groups']}"
             )
 
     train_seconds = time.perf_counter() - started

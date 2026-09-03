@@ -8,20 +8,17 @@ Core training algorithm
     v_gt = x1 - x0
 
     # Keep gradients only for predictions that occur in the loss.
-    V_minus, V_plus = model(
-        cat(x_s, x_s), cat(s, s), cat(t-delta, t+delta)
-    ).chunk(2)
+    V_minus, V_plus = model(cat(x_s, x_s), cat(s, s), cat(t-delta, t+delta)).chunk(2)
     with no_grad:
         V_st = model(x_s, s, t)
+        X_t_hat = x_s + (t-s) * V_st
+        v_teacher = model(X_t_hat, t, t)
 
     X_minus = x_s + (t-delta-s) * V_minus
     X_plus  = x_s + (t+delta-s) * V_plus
     v_tangent = (X_plus - X_minus) / (2*delta)
-    X_t_hat = x_s + (t-s) * V_st
 
-    # The self-teacher is inference-only; local FM is the other gradient path.
-    with no_grad:
-        v_teacher = model(X_t_hat, t, t)
+    # Local FM is the other gradient path.
     v_local = model(x_t, t, t)
 
     loss_fm  = MSE(v_local, v_gt)
@@ -233,25 +230,21 @@ def central_difference_lsd(
         model, x_s, s, t_minus, t_plus, context, kwargs
     )
 
-    # V_st only constructs a detached teacher input. Running it separately
-    # avoids retaining a third B-sized DiT graph until the final backward.
+    # V_st and v_teacher form one inference-only chain. Keeping them in a
+    # single no-grad block makes the stop-gradient boundary explicit and avoids
+    # retaining either B-sized DiT graph until the final backward.
     with torch.no_grad():
         V_st = _predict(model, x_s, s, t, context, kwargs)
+        X_t_hat = flow_map(x_s, s, t, V_st)
+        v_teacher = _predict(model, X_t_hat, t, t, context, kwargs)
 
     X_minus = flow_map(x_s, s, t_minus, V_minus)
     X_plus = flow_map(x_s, s, t_plus, V_plus)
     v_tangent = (X_plus - X_minus) / (2.0 * delta)
 
-    # The self-teacher is stop-gradient, including its model-generated input.
-    X_t_hat = flow_map(x_s, s, t, V_st).detach()
-
     # -------------------------------------------------------------------------
-    # 2. Local FM supervision + inference-only self-teacher
+    # 2. Local FM supervision
     # -------------------------------------------------------------------------
-    # Compute the teacher before the local gradient path so its temporary
-    # activations are already released when the local graph is constructed.
-    with torch.no_grad():
-        v_teacher = _predict(model, X_t_hat, t, t, context, kwargs)
     v_local = _predict(model, x_t, t, t, context, kwargs)
 
     loss_fm = masked_mse(v_local - v_gt, pad=pad)

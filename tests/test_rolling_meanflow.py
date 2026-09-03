@@ -151,8 +151,8 @@ def test_loss_retains_gradients_only_for_tangent_and_local_paths():
     loss, _ = rollflow.loss(model, actions)
     loss.backward()
 
-    assert model.batch_sizes == [6, 3, 3, 3]
-    assert model.grad_enabled == [True, False, False, True]
+    assert model.batch_sizes == [3, 3, 9]
+    assert model.grad_enabled == [False, False, True]
     assert model.value.grad is not None
     assert torch.isfinite(model.value.grad)
 

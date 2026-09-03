@@ -7,19 +7,21 @@ Core training algorithm
     x_t = (1-t) * x0 + t * x1
     v_gt = x1 - x0
 
-    # Keep gradients only for predictions that occur in the loss.
-    V_minus, V_plus = model(cat(x_s, x_s), cat(s, s), cat(t-delta, t+delta)).chunk(2)
+    # Build the complete stop-gradient teacher path first.
     with no_grad:
         V_st = model(x_s, s, t)
         X_t_hat = x_s + (t-s) * V_st
         v_teacher = model(X_t_hat, t, t)
 
+    # Pack every gradient-bearing prediction into one forward.
+    V_minus, V_plus, v_local = model(
+        cat(x_s, x_s, x_t),
+        cat(s, s, t),
+        cat(t-delta, t+delta, t),
+    ).chunk(3)
     X_minus = x_s + (t-delta-s) * V_minus
     X_plus  = x_s + (t+delta-s) * V_plus
     v_tangent = (X_plus - X_minus) / (2*delta)
-
-    # Local FM is the other gradient path.
-    v_local = model(x_t, t, t)
 
     loss_fm  = MSE(v_local, v_gt)
     loss_lsd = MSE(v_tangent, stopgrad(v_teacher))
@@ -218,34 +220,33 @@ def central_difference_lsd(
     x_t = lerp_path(x0, x1, t)
     v_gt = x1.float() - x0.float()
 
-    # -------------------------------------------------------------------------
-    # 1. Flow-map prediction: gradients only through [t-delta, t+delta]
-    # -------------------------------------------------------------------------
     # Diagonal tokens are not used by LSD. Keep their queries diagonal instead
     # of creating invalid backward maps with t-delta < s.
     t_minus = torch.where(active, t - delta, t)
     t_plus = torch.where(active, t + delta, t)
 
-    V_minus, V_plus = _parallel_tangent_predictions(
-        model, x_s, s, t_minus, t_plus, context, kwargs
-    )
-
-    # V_st and v_teacher form one inference-only chain. Keeping them in a
-    # single no-grad block makes the stop-gradient boundary explicit and avoids
-    # retaining either B-sized DiT graph until the final backward.
+    # -------------------------------------------------------------------------
+    # 1. Inference-only self-teacher path
+    # -------------------------------------------------------------------------
+    # Compute this path before constructing the student graph so its temporary
+    # activations are released immediately.
     with torch.no_grad():
         V_st = _predict(model, x_s, s, t, context, kwargs)
         X_t_hat = flow_map(x_s, s, t, V_st)
         v_teacher = _predict(model, X_t_hat, t, t, context, kwargs)
 
+    # -------------------------------------------------------------------------
+    # 2. Gradient-bearing tangent endpoints + local FM prediction
+    # -------------------------------------------------------------------------
+    # Packing all three student predictions keeps the retained graph at 3B
+    # while reducing the total number of model calls from four to three.
+    V_minus, V_plus, v_local = _parallel_student_predictions(
+        model, x_s, x_t, s, t, t_minus, t_plus, context, kwargs
+    )
+
     X_minus = flow_map(x_s, s, t_minus, V_minus)
     X_plus = flow_map(x_s, s, t_plus, V_plus)
     v_tangent = (X_plus - X_minus) / (2.0 * delta)
-
-    # -------------------------------------------------------------------------
-    # 2. Local FM supervision
-    # -------------------------------------------------------------------------
-    v_local = _predict(model, x_t, t, t, context, kwargs)
 
     loss_fm = masked_mse(v_local - v_gt, pad=pad)
     loss_lsd = masked_mse(v_tangent - v_teacher, pad=pad, valid=active)
@@ -473,10 +474,12 @@ def _predict(
     return out
 
 
-def _parallel_tangent_predictions(
+def _parallel_student_predictions(
     model,
     x_s,
+    x_t,
     s,
+    t,
     t_minus,
     t_plus,
     context,
@@ -485,13 +488,13 @@ def _parallel_tangent_predictions(
     B = x_s.shape[0]
     out = _predict(
         model,
-        torch.cat((x_s, x_s), dim=0),
-        torch.cat((s, s), dim=0),
-        torch.cat((t_minus, t_plus), dim=0),
-        repeat_batch(context, 2, B),
-        repeat_batch(kwargs, 2, B),
+        torch.cat((x_s, x_s, x_t), dim=0),
+        torch.cat((s, s, t), dim=0),
+        torch.cat((t_minus, t_plus, t), dim=0),
+        repeat_batch(context, 3, B),
+        repeat_batch(kwargs, 3, B),
     )
-    return out.chunk(2, dim=0)
+    return out.chunk(3, dim=0)
 
 
 def repeat_batch(value: Any, repeats: int, batch: int) -> Any:

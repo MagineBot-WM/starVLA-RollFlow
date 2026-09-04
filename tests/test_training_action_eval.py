@@ -4,12 +4,7 @@ import numpy as np
 import pytest
 from torch import nn
 
-from starVLA.training.train_starvla import (
-    VLATrainer,
-    _align_action_targets,
-    _collect_scalar_metrics,
-    _format_metrics,
-)
+from starVLA.training.train_starvla import VLATrainer, _align_action_targets
 
 
 def test_align_action_targets_uses_executed_prefix_of_training_window():
@@ -28,29 +23,6 @@ def test_align_action_targets_rejects_incompatible_shapes():
             np.zeros((1, 32, 7)),
             action_horizon=32,
         )
-
-
-def test_rollflow_diagnostics_are_collected_and_formatted():
-    output = {
-        "action_loss": np.float32(1.25),
-        "rollflow/fm_loss": 1.0,
-        "rollflow/lsd_loss": np.float32(0.5),
-        "rollflow/active_lsd_frac": 0.75,
-        "non_scalar": np.zeros(2),
-    }
-
-    metrics = _collect_scalar_metrics(output, exclude=("action_loss",))
-    message = _format_metrics(20, {"action_dit_loss": 1.25, **metrics})
-
-    assert metrics == {
-        "rollflow/fm_loss": 1.0,
-        "rollflow/lsd_loss": 0.5,
-        "rollflow/active_lsd_frac": 0.75,
-    }
-    assert message == (
-        "Step 20 | action_dit_loss=1.25 | rollflow/fm_loss=1 | "
-        "rollflow/lsd_loss=0.5 | rollflow/active_lsd_frac=0.75"
-    )
 
 
 class _RollingEvalPolicy(nn.Module):

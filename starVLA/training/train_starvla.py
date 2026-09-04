@@ -483,8 +483,11 @@ class VLATrainer(TrainerUtils):
             if self.accelerator.sync_gradients:
                 self.lr_scheduler.step()
 
-        metrics = {"action_dit_loss": action_loss.item()}
-        metrics.update(output_dict.get("action_metrics", {}))
+        metrics = {}
+        for key, value in output_dict.items():
+            if torch.is_tensor(value) and value.numel() == 1:
+                value = value.item()
+            metrics["action_dit_loss" if key == "action_loss" else key] = value
         return metrics
 
     def _finalize_training(self):

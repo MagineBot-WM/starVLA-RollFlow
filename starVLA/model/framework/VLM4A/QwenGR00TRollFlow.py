@@ -248,7 +248,7 @@ class Qwen_GR00T_RollFlow(baseframework):
         stats = self.action_model.last_loss_stats or {}
         return {
             "action_loss": action_loss,
-            "action_metrics": {f"rollflow/{key}": value for key, value in stats.items()},
+            **{f"rollflow/{key}": value for key, value in stats.items()},
         }
 
     @torch.inference_mode()

@@ -45,6 +45,7 @@ class Args:
     #################################################################################################################
     # Utils
     #################################################################################################################
+    save_video: bool = True  # Record and encode rollout videos; camera observations remain enabled.
     video_out_path: str = "experiments/libero/logs"  # Path to save videos
 
     seed: int = 7  # Random Seed (for reproducibility)
@@ -73,7 +74,8 @@ def eval_libero(args: Args) -> None:
 
     # args.video_out_path = f"{date_base}+{args.job_name}"
 
-    pathlib.Path(args.video_out_path).mkdir(parents=True, exist_ok=True)
+    if args.save_video:
+        pathlib.Path(args.video_out_path).mkdir(parents=True, exist_ok=True)
 
     if args.task_suite_name == "libero_spatial":
         max_steps = 220  # longest training demo has 193 steps
@@ -145,8 +147,8 @@ def eval_libero(args: Args) -> None:
                 img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
                 wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
 
-                # Save preprocessed image for replay video
-                replay_images.append(img)
+                if args.save_video:
+                    replay_images.append(img)
 
                 state = np.concatenate(
                     (
@@ -212,14 +214,15 @@ def eval_libero(args: Args) -> None:
             task_episodes += 1
             total_episodes += 1
 
-            # Save a replay video of the episode
-            suffix = "success" if done else "failure"
-            task_segment = task_description.replace(" ", "_")
-            imageio.mimwrite(
-                pathlib.Path(args.video_out_path) / f"rollout_{task_segment}_episode{episode_idx}_{suffix}.mp4",
-                [np.asarray(x) for x in replay_images],
-                fps=10,
-            )
+            if args.save_video:
+                suffix = "success" if done else "failure"
+                task_segment = task_description.replace(" ", "_")
+                imageio.mimwrite(
+                    pathlib.Path(args.video_out_path)
+                    / f"rollout_{task_segment}_episode{episode_idx}_{suffix}.mp4",
+                    replay_images,
+                    fps=10,
+                )
 
             full_actions = np.stack(full_actions)
             # np.save(pathlib.Path(args.video_out_path) / f"rollout_{task_segment}_episode{episode_idx}_{suffix}.npy", full_actions)

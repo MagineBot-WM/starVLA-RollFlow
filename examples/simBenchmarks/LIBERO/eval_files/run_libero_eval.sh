@@ -38,6 +38,9 @@ MAX_TASKS="${MAX_TASKS:--1}"
 NUM_STEPS_WAIT="${NUM_STEPS_WAIT:-10}"
 SEED="${SEED:-7}"
 UNNORM_KEY="${UNNORM_KEY:-franka}"
+# Set to 0 to skip replay-frame buffering and MP4 encoding. The simulator must
+# still render camera observations because they are policy inputs.
+SAVE_VIDEO="${SAVE_VIDEO:-1}"
 ATTACH="${ATTACH:-1}"
 
 SUITES=(libero_spatial libero_object libero_goal libero_10)
@@ -92,6 +95,10 @@ esac
 [[ -f "${CKPT}" ]] || { echo "Checkpoint not found: ${CKPT}" >&2; exit 1; }
 [[ -x "${STARVLA_PYTHON}" ]] || { echo "Invalid STARVLA_PYTHON: ${STARVLA_PYTHON}" >&2; exit 1; }
 [[ -x "${LIBERO_PYTHON}" ]] || { echo "Invalid LIBERO_PYTHON: ${LIBERO_PYTHON}" >&2; exit 1; }
+[[ "${SAVE_VIDEO}" == "0" || "${SAVE_VIDEO}" == "1" ]] || {
+  echo "SAVE_VIDEO must be 0 or 1; got: ${SAVE_VIDEO}" >&2
+  exit 2
+}
 [[ -f "${LIBERO_HOME}/libero/libero/__init__.py" ]] || {
   echo "Invalid LIBERO_HOME: ${LIBERO_HOME}" >&2
   exit 1
@@ -145,6 +152,12 @@ keep_open() {
   printf '%s; code=$?; echo "[%s exited with code $code]"; exec bash' "${command}" "${name}"
 }
 
+if [[ "${SAVE_VIDEO}" == "1" ]]; then
+  VIDEO_FLAG="--args.save-video"
+else
+  VIDEO_FLAG="--args.no-save-video"
+fi
+
 for i in "${!SUITES[@]}"; do
   suite="${SUITES[$i]}"
   label="${LABELS[$i]}"
@@ -159,12 +172,12 @@ for i in "${!SUITES[@]}"; do
     "${STARVLA_DIR}/deployment/model_server/server_policy.py" "${CKPT}" "${port}" \
     "${SERVER_LOG_DIR}/${suite}.log"
   printf -v eval_run \
-    'cd %q && DEBUG= LIBERO_CONFIG_PATH=%q PYTHONPATH=%q MUJOCO_GL=egl PYOPENGL_PLATFORM=egl TOKENIZERS_PARALLELISM=false TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 CUDA_VISIBLE_DEVICES=%q %q %q --args.pretrained-path %q --args.host 127.0.0.1 --args.port %q --args.task-suite-name %q --args.num-trials-per-task %q --args.max-tasks %q --args.num-steps-wait %q --args.seed %q --args.video-out-path %q --args.unnorm-key %q 2>&1 | tee %q' \
+    'cd %q && DEBUG= LIBERO_CONFIG_PATH=%q PYTHONPATH=%q MUJOCO_GL=egl PYOPENGL_PLATFORM=egl TOKENIZERS_PARALLELISM=false TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 CUDA_VISIBLE_DEVICES=%q %q %q --args.pretrained-path %q --args.host 127.0.0.1 --args.port %q --args.task-suite-name %q --args.num-trials-per-task %q --args.max-tasks %q --args.num-steps-wait %q --args.seed %q --args.video-out-path %q --args.unnorm-key %q %q 2>&1 | tee %q' \
     "${STARVLA_DIR}" "${LIBERO_CONFIG_PATH}" "${LIBERO_HOME}:${STARVLA_DIR}" "${gpu}" \
     "${LIBERO_PYTHON}" "${STARVLA_DIR}/examples/simBenchmarks/LIBERO/eval_files/eval_libero.py" \
     "${CKPT}" "${port}" "${suite}" "${NUM_TRIALS_PER_TASK}" "${MAX_TASKS}" \
     "${NUM_STEPS_WAIT}" "${SEED}" "${output_dir}" \
-    "${UNNORM_KEY}" "${output_dir}/eval.log"
+    "${UNNORM_KEY}" "${VIDEO_FLAG}" "${output_dir}/eval.log"
 
   server_cmd="$(keep_open "server-${label}" "set -o pipefail; ${server_run}")"
   eval_cmd="$(keep_open "eval-${label}" "set -o pipefail; ${eval_run}")"
@@ -179,6 +192,7 @@ done
 tmux select-window -t "${SESSION}:eval-spatial"
 echo "Started ${SESSION}: four servers + four evaluators"
 echo "  checkpoint : ${CKPT}"
+echo "  save video : ${SAVE_VIDEO}"
 echo "  windows    : Ctrl-b then 0..7"
 echo "  detach     : Ctrl-b then d"
 echo "  status     : $0 status"

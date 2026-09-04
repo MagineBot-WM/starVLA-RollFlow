@@ -92,6 +92,35 @@ def _align_action_targets(
         )
     return target_window[:, : predicted.shape[1], :]
 
+
+def _collect_scalar_metrics(output_dict: dict, *, exclude=()) -> dict:
+    """Detach scalar model diagnostics for logging without affecting autograd."""
+    excluded = set(exclude)
+    metrics = {}
+    for name, value in output_dict.items():
+        if name in excluded:
+            continue
+        if torch.is_tensor(value):
+            if value.numel() == 1:
+                metrics[name] = value.detach().item()
+        elif isinstance(value, (bool, int, float, np.number)):
+            metrics[name] = value.item() if isinstance(value, np.number) else value
+    return metrics
+
+
+def _format_metrics(step: int, metrics: dict) -> str:
+    """Format metrics as stable key=value fields instead of a wrapped dict."""
+    fields = [f"Step {step}"]
+    for name, value in metrics.items():
+        if isinstance(value, bool):
+            formatted = str(value).lower()
+        elif isinstance(value, float):
+            formatted = f"{value:.6g}"
+        else:
+            formatted = str(value)
+        fields.append(f"{name}={formatted}")
+    return " | ".join(fields)
+
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -345,7 +374,7 @@ class VLATrainer(TrainerUtils):
                 except Exception as exc:
                     self._wandb_enabled = False
                     logger.warning(f"W&B log failed; disabling W&B: {exc}")
-            logger.info(f"Step {self.completed_steps}, Loss: {metrics})")
+            logger.info(_format_metrics(self.completed_steps, metrics))
 
     def _create_data_iterators(self):
         """Create data iterators."""
@@ -483,9 +512,9 @@ class VLATrainer(TrainerUtils):
             if self.accelerator.sync_gradients:
                 self.lr_scheduler.step()
 
-        return {
-            "action_dit_loss": action_loss.item(),
-        }
+        metrics = {"action_dit_loss": action_loss.item()}
+        metrics.update(_collect_scalar_metrics(output_dict, exclude=("action_loss",)))
+        return metrics
 
     def _finalize_training(self):
         """Training end processing."""

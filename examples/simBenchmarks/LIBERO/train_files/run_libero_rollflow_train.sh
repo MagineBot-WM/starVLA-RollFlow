@@ -16,6 +16,7 @@ save_interval="${SAVE_INTERVAL:-5000}"
 logging_frequency="${LOGGING_FREQUENCY:-20}"
 tmux_session="${TMUX_SESSION:-rollflow_libero}"
 wait_for_gpu_free="${WAIT_FOR_GPU_FREE:-1}"
+pytorch_cuda_alloc_conf="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 output_dir="${run_root}/${run_id}"
 if [[ -e "${output_dir}" ]]; then
@@ -36,11 +37,12 @@ if [[ "${1:-}" != "--worker" ]]; then
 
   log_file="${run_root}/${run_id}.train.log"
   printf -v worker_cmd \
-    'cd %q && exec env STARVLA_DIR=%q STARVLA_PYTHON=%q CONFIG_YAML=%q DATA_ROOT=%q RUN_ROOT=%q RUN_ID=%q NUM_GPUS=%q MAIN_PROCESS_PORT=%q BATCH_PER_GPU=%q MAX_TRAIN_STEPS=%q SAVE_INTERVAL=%q LOGGING_FREQUENCY=%q WAIT_FOR_GPU_FREE=%q WANDB_MODE=disabled %q --worker >> %q 2>&1' \
+    'cd %q && exec env STARVLA_DIR=%q STARVLA_PYTHON=%q CONFIG_YAML=%q DATA_ROOT=%q RUN_ROOT=%q RUN_ID=%q NUM_GPUS=%q MAIN_PROCESS_PORT=%q BATCH_PER_GPU=%q MAX_TRAIN_STEPS=%q SAVE_INTERVAL=%q LOGGING_FREQUENCY=%q WAIT_FOR_GPU_FREE=%q PYTORCH_CUDA_ALLOC_CONF=%q WANDB_MODE=disabled %q --worker >> %q 2>&1' \
     "${repo_root}" "${repo_root}" "${python_bin}" "${config_yaml}" \
     "${data_root}" "${run_root}" "${run_id}" "${num_gpus}" \
     "${main_process_port}" "${batch_per_gpu}" "${max_train_steps}" "${save_interval}" \
-    "${logging_frequency}" "${wait_for_gpu_free}" "${script_path}" "${log_file}"
+    "${logging_frequency}" "${wait_for_gpu_free}" "${pytorch_cuda_alloc_conf}" \
+    "${script_path}" "${log_file}"
 
   tmux new-session -d -s "${tmux_session}" "${worker_cmd}"
   echo "Started tmux session: ${tmux_session}"
@@ -61,6 +63,7 @@ fi
 cd "${repo_root}"
 export PYTHONPATH="${repo_root}:${PYTHONPATH:-}"
 export WANDB_MODE=disabled
+export PYTORCH_CUDA_ALLOC_CONF="${pytorch_cuda_alloc_conf}"
 
 exec "${python_bin}" -m accelerate.commands.launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \

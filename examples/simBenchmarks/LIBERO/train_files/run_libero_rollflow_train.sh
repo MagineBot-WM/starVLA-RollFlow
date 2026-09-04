@@ -102,7 +102,7 @@ if [[ "${1:-}" != "--worker" ]]; then
   mkdir -p "${run_root}"
   log_file="${run_root}/${run_id}.train.log"
   printf -v worker_cmd \
-    'cd %q && exec env STARVLA_DIR=%q STARVLA_PYTHON=%q CONFIG_YAML=%q DATA_ROOT=%q DATA_MIX=%q RUN_ROOT=%q RUN_ID=%q NUM_GPUS=%q CUDA_VISIBLE_DEVICES=%q MAIN_PROCESS_PORT=%q BATCH_PER_GPU=%q MAX_TRAIN_STEPS=%q SAVE_INTERVAL=%q EVAL_INTERVAL=%q LOGGING_FREQUENCY=%q WAIT_FOR_GPU_FREE=%q RESUME=%q PYTORCH_CUDA_ALLOC_CONF=%q PYTHONUNBUFFERED=1 WANDB_MODE=disabled %q --worker >> %q 2>&1' \
+    'cd %q && exec env STARVLA_DIR=%q STARVLA_PYTHON=%q CONFIG_YAML=%q DATA_ROOT=%q DATA_MIX=%q RUN_ROOT=%q RUN_ID=%q NUM_GPUS=%q CUDA_VISIBLE_DEVICES=%q MAIN_PROCESS_PORT=%q BATCH_PER_GPU=%q MAX_TRAIN_STEPS=%q SAVE_INTERVAL=%q EVAL_INTERVAL=%q LOGGING_FREQUENCY=%q WAIT_FOR_GPU_FREE=%q RESUME=%q PYTORCH_CUDA_ALLOC_CONF=%q PYTHONUNBUFFERED=1 NO_ALBUMENTATIONS_UPDATE=1 WANDB_MODE=disabled %q --worker >> %q 2>&1' \
     "${repo_root}" "${repo_root}" "${python_bin}" "${config_yaml}" \
     "${data_root}" "${data_mix}" "${run_root}" "${run_id}" "${num_gpus}" \
     "${cuda_visible_devices}" "${main_process_port}" "${batch_per_gpu}" \
@@ -139,6 +139,7 @@ cp "${script_path}" "${output_dir}/train_launcher.sh"
 export PYTHONPATH="${repo_root}:${PYTHONPATH:-}"
 export WANDB_MODE=disabled
 export PYTHONUNBUFFERED=1
+export NO_ALBUMENTATIONS_UPDATE=1
 export PYTORCH_CUDA_ALLOC_CONF="${pytorch_cuda_alloc_conf}"
 
 exec "${python_bin}" -m accelerate.commands.launch \

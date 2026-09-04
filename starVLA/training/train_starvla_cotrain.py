@@ -366,9 +366,8 @@ class VLAMTrainer(TrainerUtils):
         # drive gradient accumulation through the engine directly: `backward()`
         # accumulates and `step()` only updates on the engine's own boundary.
         if hasattr(self.model, "is_gradient_accumulation_boundary") and hasattr(self.model, "backward"):
-            with torch.autocast("cuda", dtype=torch.bfloat16):
-                output_dict = self.model.forward(batch_vla)
-                action_loss = output_dict["action_loss"]
+            output_dict = self.model.forward(batch_vla)
+            action_loss = output_dict["action_loss"]
             self.model.backward(action_loss)
 
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):

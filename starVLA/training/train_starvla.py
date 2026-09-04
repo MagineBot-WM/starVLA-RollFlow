@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Tuple
 
@@ -462,7 +463,12 @@ class VLATrainer(TrainerUtils):
         with self.accelerator.accumulate(self.model):
             self.optimizer.zero_grad()
 
-            with torch.autocast("cuda", dtype=torch.bfloat16):
+            precision_context = (
+                nullcontext()
+                if hasattr(self.model, "is_gradient_accumulation_boundary")
+                else torch.autocast("cuda", dtype=torch.bfloat16)
+            )
+            with precision_context:
                 output_dict = self.model.forward(
                     batch_vla, training_step=self.completed_steps
                 )

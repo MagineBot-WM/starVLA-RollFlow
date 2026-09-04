@@ -87,6 +87,7 @@ class ModelClient:
         self.num_image_history = min(self.num_image_history + 1, self.horizon)
 
     def reset(self, task_description: str) -> None:
+        self.client.reset()
         self.task_description = task_description
         self.image_history.clear()
         if self.action_ensemble:

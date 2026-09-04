@@ -233,6 +233,7 @@ def eval_libero(args: Args) -> None:
         # Log final results
         logging.info(f"Current task success rate: {float(task_successes) / float(task_episodes)}")
         logging.info(f"Current total success rate: {float(total_successes) / float(total_episodes)}")
+        env.close()
 
     logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
     logging.info(f"Total episodes: {total_episodes}")
@@ -288,6 +289,6 @@ if __name__ == "__main__":
         datefmt="%m/%d [%H:%M:%S]",
         force=True,
     )
-    if os.getenv("DEBUG", False):
+    if os.getenv("DEBUG", "").lower() in {"1", "true", "yes"}:
         start_debugpy_once()
     tyro.cli(eval_libero)

@@ -124,6 +124,16 @@ class WebsocketClientPolicy:
         except Exception:
             pass
 
+    def reset(self) -> None:
+        """Reset stateful policy state without reconnecting the client."""
+        self._ws.send(self._packer.pack({"type": "reset"}))
+        response = self._ws.recv()
+        if isinstance(response, str):
+            raise RuntimeError(f"Error resetting inference server:\n{response}")
+        result = msgpack_numpy.unpackb(response)
+        if not result.get("ok", False):
+            raise RuntimeError(f"Inference server rejected reset: {result}")
+
     @override
     def predict_action(self, query_info: Dict) -> Dict:
         self._check_eval_observation_contract(query_info)

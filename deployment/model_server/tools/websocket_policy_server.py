@@ -137,7 +137,36 @@ class WebsocketPolicyServer:
                 "data": data,
             }
 
-        # unknow request type
+        # reset --> clear stateful policy caches between episodes
+        elif mtype == "reset":
+            reset = getattr(self._policy, "reset", None)
+            if not callable(reset):
+                return {
+                    "status": "error",
+                    "ok": False,
+                    "type": "reset_result",
+                    "request_id": req_id,
+                    "error": {"message": "Policy does not support reset"},
+                }
+            try:
+                reset()
+            except Exception as exc:
+                logging.exception("Policy reset error (request_id=%s)", req_id)
+                return {
+                    "status": "error",
+                    "ok": False,
+                    "type": "reset_result",
+                    "request_id": req_id,
+                    "error": {"message": str(exc)},
+                }
+            return {
+                "status": "ok",
+                "ok": True,
+                "type": "reset_result",
+                "request_id": req_id,
+            }
+
+        # unknown request type
         else:
             return {
                 "status": "error",

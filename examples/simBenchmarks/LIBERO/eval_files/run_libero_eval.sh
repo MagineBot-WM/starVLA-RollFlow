@@ -1,27 +1,52 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-command LIBERO evaluation manager.
+# Four-suite LIBERO evaluation in one tmux session.
 #
-#   bash run_libero_eval.sh          Start server + evaluator, then attach.
-#   bash run_libero_eval.sh status   Show both tmux windows.
-#   bash run_libero_eval.sh attach   Reattach after closing the terminal.
-#   bash run_libero_eval.sh stop     Stop both processes and delete the session.
+# GPU / port mapping:
+#   GPU 0, port 6694 -> libero_spatial
+#   GPU 1, port 6695 -> libero_object
+#   GPU 2, port 6696 -> libero_goal
+#   GPU 3, port 6697 -> libero_10 (Long)
 #
-# Inside tmux, press Ctrl-b then 0/1 to switch server/eval windows.
-# Detach without stopping anything: Ctrl-b then d. Reattach with `attach`.
+# Each suite gets its own policy server because RollFlow keeps inference state.
+# Sharing one server between concurrent environments would mix rolling caches.
+#
+# Usage:
+#   bash run_libero_eval.sh          Start all four suites and attach tmux.
+#   bash run_libero_eval.sh status   List windows and completed videos.
+#   bash run_libero_eval.sh attach   Reattach after leaving the terminal.
+#   bash run_libero_eval.sh stop     Stop all eight processes.
+#
+# Inside tmux:
+#   Ctrl-b, then 0..7  Switch window
+#   Ctrl-b, then d     Detach without stopping evaluation
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=eval_config.sh
-source "${SCRIPT_DIR}/eval_config.sh"
+STARVLA_DIR="${STARVLA_DIR:-$(cd "${SCRIPT_DIR}/../../../.." && pwd)}"
 
-SESSION="${SESSION:-rollflow_libero_eval}"
+# Usually this is the only line to change.
+CKPT="${CKPT:-/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_10000_pytorch_model.pt}"
+
+STARVLA_PYTHON="${STARVLA_PYTHON:-/data/miniconda3/envs/starVLA/bin/python}"
+LIBERO_PYTHON="${LIBERO_PYTHON:-/data/miniconda3/envs/lerobot/bin/python}"
+LIBERO_HOME="${LIBERO_HOME:-/home/taizun/tzq/LIBERO}"
+SESSION="${SESSION:-rollflow_libero_4suite}"
+BASE_PORT="${BASE_PORT:-6694}"
+NUM_TRIALS_PER_TASK="${NUM_TRIALS_PER_TASK:-50}"
+MAX_TASKS="${MAX_TASKS:--1}"
+NUM_STEPS_WAIT="${NUM_STEPS_WAIT:-10}"
+SEED="${SEED:-7}"
+UNNORM_KEY="${UNNORM_KEY:-franka}"
+ATTACH="${ATTACH:-1}"
+
+SUITES=(libero_spatial libero_object libero_goal libero_10)
+LABELS=(spatial object goal long)
+GPUS=(0 1 2 3)
 ACTION="${1:-start}"
-VIDEO_OUT_PATH="${VIDEO_OUT_PATH:-}"
-LOG_FILE="${LOG_FILE:-}"
 
 usage() {
-  sed -n '3,10p' "${BASH_SOURCE[0]}"
+  sed -n '14,18p' "${BASH_SOURCE[0]}"
 }
 
 case "${ACTION}" in
@@ -31,12 +56,27 @@ case "${ACTION}" in
       exit 1
     }
     tmux list-windows -t "${SESSION}"
+    echo
+    for suite in "${SUITES[@]}"; do
+      result_dir="${RESULTS_ROOT:-${CKPT%%/checkpoints/*}/results}/${suite}/$(basename "${CKPT}")"
+      count=0
+      [[ ! -d "${result_dir}" ]] || count="$(find "${result_dir}" -maxdepth 1 -name 'rollout_*.mp4' | wc -l)"
+      printf '%-16s %s completed videos\n' "${suite}" "${count}"
+    done
     exit
     ;;
   attach)
+    tmux has-session -t "${SESSION}" 2>/dev/null || {
+      echo "tmux session is not running: ${SESSION}"
+      exit 1
+    }
     exec tmux attach -t "${SESSION}"
     ;;
   stop)
+    tmux has-session -t "${SESSION}" 2>/dev/null || {
+      echo "tmux session is not running: ${SESSION}"
+      exit 0
+    }
     tmux kill-session -t "${SESSION}"
     echo "Stopped tmux session: ${SESSION}"
     exit
@@ -49,51 +89,100 @@ case "${ACTION}" in
   *) usage; exit 2 ;;
 esac
 
+[[ -f "${CKPT}" ]] || { echo "Checkpoint not found: ${CKPT}" >&2; exit 1; }
+[[ -x "${STARVLA_PYTHON}" ]] || { echo "Invalid STARVLA_PYTHON: ${STARVLA_PYTHON}" >&2; exit 1; }
+[[ -x "${LIBERO_PYTHON}" ]] || { echo "Invalid LIBERO_PYTHON: ${LIBERO_PYTHON}" >&2; exit 1; }
+[[ -f "${LIBERO_HOME}/libero/libero/__init__.py" ]] || {
+  echo "Invalid LIBERO_HOME: ${LIBERO_HOME}" >&2
+  exit 1
+}
 tmux has-session -t "${SESSION}" 2>/dev/null && {
-  echo "Session already exists: ${SESSION}"
-  echo "Use '$0 attach' or '$0 stop'."
+  echo "Session already exists: ${SESSION}. Use '$0 attach' or '$0 stop'." >&2
   exit 1
 }
-if [[ -n "$(ss -H -ltn "sport = :${PORT}" 2>/dev/null)" ]]; then
-  echo "Port ${PORT} is already in use; refusing to start a second policy server." >&2
-  echo "This also protects RollFlow cache state from concurrent evaluators." >&2
-  exit 1
-fi
 
-[[ -n "${CKPT}" && -f "${CKPT}" ]] || {
-  echo "Checkpoint not found: ${CKPT}" >&2
-  exit 1
-}
+# Refuse partial startup. An occupied port usually means another policy server
+# is active; launching another evaluator against it would corrupt RollFlow state.
+for i in "${!SUITES[@]}"; do
+  port=$((BASE_PORT + i))
+  if [[ -n "$(ss -H -ltn "sport = :${port}" 2>/dev/null)" ]]; then
+    echo "Port ${port} is already in use; nothing was started." >&2
+    exit 1
+  fi
+done
 
 MODEL_ROOT="${CKPT%%/checkpoints/*}"
-SERVER_LOG="${SERVER_LOG:-${MODEL_ROOT}/results/server_$(basename "${CKPT}").log}"
-mkdir -p "$(dirname "${SERVER_LOG}")"
+CKPT_NAME="$(basename "${CKPT}")"
+RESULTS_ROOT="${RESULTS_ROOT:-${MODEL_ROOT}/results}"
+SERVER_LOG_DIR="${RESULTS_ROOT}/servers/${CKPT_NAME}"
+LIBERO_CONFIG_PATH="${LIBERO_CONFIG_PATH:-${XDG_CACHE_HOME:-${HOME}/.cache}/starvla/libero}"
+mkdir -p "${SERVER_LOG_DIR}" "${LIBERO_CONFIG_PATH}"
 
-printf -v server_cmd \
-  'cd %q && CKPT=%q PORT=%q GPU_ID=%q USE_BF16=%q STARVLA_PYTHON=%q bash %q 2>&1 | tee %q' \
-  "${SCRIPT_DIR}" "${CKPT}" "${PORT}" "${GPU_ID}" "${USE_BF16}" "${STARVLA_PYTHON}" \
-  "${SCRIPT_DIR}/run_policy_server.sh" "${SERVER_LOG}"
-printf -v eval_cmd \
-  'cd %q && CKPT=%q HOST=%q PORT=%q EVAL_GPU_ID=%q LIBERO_PYTHON=%q LIBERO_HOME=%q TASK_SUITE_NAME=%q NUM_TRIALS_PER_TASK=%q MAX_TASKS=%q NUM_STEPS_WAIT=%q SEED=%q UNNORM_KEY=%q VIDEO_OUT_PATH=%q LOG_FILE=%q bash %q' \
-  "${SCRIPT_DIR}" "${CKPT}" "${HOST}" "${PORT}" "${EVAL_GPU_ID}" \
-  "${LIBERO_PYTHON}" "${LIBERO_HOME}" "${TASK_SUITE_NAME}" \
-  "${NUM_TRIALS_PER_TASK}" "${MAX_TASKS}" "${NUM_STEPS_WAIT}" "${SEED}" \
-  "${UNNORM_KEY}" "${VIDEO_OUT_PATH}" "${LOG_FILE}" "${SCRIPT_DIR}/eval_libero.sh"
+# Use a private config because ~/.libero/config.yaml on this machine points to
+# an old checkout. The files below are trusted local LIBERO benchmark assets.
+"${LIBERO_PYTHON}" - "${LIBERO_HOME}" "${LIBERO_CONFIG_PATH}/config.yaml" <<'PY'
+import pathlib
+import sys
 
-# Keep each window open after a process exits so its traceback and exit code
-# remain visible. Type `exit` in that window after inspection.
-server_cmd="set -o pipefail; ${server_cmd}; code=\$?; echo \"[server exited with code \$code]\"; exec bash"
-eval_cmd="${eval_cmd}; code=\$?; echo \"[eval exited with code \$code]\"; exec bash"
+root = pathlib.Path(sys.argv[1]).resolve()
+benchmark = root / "libero" / "libero"
+paths = {
+    "assets": benchmark / "assets",
+    "bddl_files": benchmark / "bddl_files",
+    "benchmark_root": benchmark,
+    "datasets": root / "datasets",
+    "init_states": benchmark / "init_files",
+}
+pathlib.Path(sys.argv[2]).write_text(
+    "".join(f"{key}: {value}\n" for key, value in paths.items()),
+    encoding="utf-8",
+)
+PY
 
-tmux new-session -d -s "${SESSION}" -n server "${server_cmd}"
-tmux new-window -t "${SESSION}" -n eval "${eval_cmd}"
+keep_open() {
+  local name="$1"
+  local command="$2"
+  printf '%s; code=$?; echo "[%s exited with code $code]"; exec bash' "${command}" "${name}"
+}
 
-echo "Started tmux session: ${SESSION}"
+for i in "${!SUITES[@]}"; do
+  suite="${SUITES[$i]}"
+  label="${LABELS[$i]}"
+  gpu="${GPUS[$i]}"
+  port=$((BASE_PORT + i))
+  output_dir="${RESULTS_ROOT}/${suite}/${CKPT_NAME}"
+  mkdir -p "${output_dir}"
+
+  printf -v server_run \
+    'cd %q && DEBUG= NO_ALBUMENTATIONS_UPDATE=1 PYTHONPATH=%q CUDA_VISIBLE_DEVICES=%q %q %q --ckpt_path %q --port %q --use_bf16 2>&1 | tee %q' \
+    "${STARVLA_DIR}" "${STARVLA_DIR}" "${gpu}" "${STARVLA_PYTHON}" \
+    "${STARVLA_DIR}/deployment/model_server/server_policy.py" "${CKPT}" "${port}" \
+    "${SERVER_LOG_DIR}/${suite}.log"
+  printf -v eval_run \
+    'cd %q && DEBUG= LIBERO_CONFIG_PATH=%q PYTHONPATH=%q MUJOCO_GL=egl PYOPENGL_PLATFORM=egl TOKENIZERS_PARALLELISM=false TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 CUDA_VISIBLE_DEVICES=%q %q %q --args.pretrained-path %q --args.host 127.0.0.1 --args.port %q --args.task-suite-name %q --args.num-trials-per-task %q --args.max-tasks %q --args.num-steps-wait %q --args.seed %q --args.video-out-path %q --args.unnorm-key %q 2>&1 | tee %q' \
+    "${STARVLA_DIR}" "${LIBERO_CONFIG_PATH}" "${LIBERO_HOME}:${STARVLA_DIR}" "${gpu}" \
+    "${LIBERO_PYTHON}" "${STARVLA_DIR}/examples/simBenchmarks/LIBERO/eval_files/eval_libero.py" \
+    "${CKPT}" "${port}" "${suite}" "${NUM_TRIALS_PER_TASK}" "${MAX_TASKS}" \
+    "${NUM_STEPS_WAIT}" "${SEED}" "${output_dir}" \
+    "${UNNORM_KEY}" "${output_dir}/eval.log"
+
+  server_cmd="$(keep_open "server-${label}" "set -o pipefail; ${server_run}")"
+  eval_cmd="$(keep_open "eval-${label}" "set -o pipefail; ${eval_run}")"
+  if (( i == 0 )); then
+    tmux new-session -d -s "${SESSION}" -n "server-${label}" "${server_cmd}"
+  else
+    tmux new-window -d -t "${SESSION}" -n "server-${label}" "${server_cmd}"
+  fi
+  tmux new-window -d -t "${SESSION}" -n "eval-${label}" "${eval_cmd}"
+done
+
+tmux select-window -t "${SESSION}:eval-spatial"
+echo "Started ${SESSION}: four servers + four evaluators"
 echo "  checkpoint : ${CKPT}"
-echo "  server log : ${SERVER_LOG}"
-echo "  windows    : Ctrl-b then 0 (server) or 1 (eval)"
-echo "  detach     : Ctrl-b, then d"
+echo "  windows    : Ctrl-b then 0..7"
+echo "  detach     : Ctrl-b then d"
+echo "  status     : $0 status"
 echo "  reattach   : $0 attach"
-echo "  stop       : $0 stop"
+echo "  stop all   : $0 stop"
 
-[[ "${ATTACH:-1}" == "0" ]] || exec tmux attach -t "${SESSION}"
+[[ "${ATTACH}" == "0" ]] || exec tmux attach -t "${SESSION}"

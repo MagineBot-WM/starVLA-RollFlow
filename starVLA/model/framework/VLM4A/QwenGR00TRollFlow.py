@@ -245,7 +245,11 @@ class Qwen_GR00T_RollFlow(baseframework):
                 training_step=int(kwargs.get("training_step", 0)),
             )  # (B, chunk_len, action_dim)
 
-        return {"action_loss": action_loss}
+        stats = self.action_model.last_loss_stats or {}
+        return {
+            "action_loss": action_loss,
+            "action_metrics": {f"rollflow/{key}": value for key, value in stats.items()},
+        }
 
     @torch.inference_mode()
     def predict_action(

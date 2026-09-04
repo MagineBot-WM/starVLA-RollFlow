@@ -98,8 +98,11 @@ def test_qwen_rollflow_full_policy_with_tiny_vlm(monkeypatch):
         "state": np.zeros((1, 2), dtype=np.float32),
     }
 
-    loss = model([example])["action_loss"]
+    output = model([example])
+    loss = output["action_loss"]
     assert torch.isfinite(loss)
+    assert output["action_metrics"]["rollflow/fm_loss"] >= 0.0
+    assert output["action_metrics"]["rollflow/lsd_loss"] >= 0.0
     loss.backward()
     assert model.qwen_vl_interface.model.token.grad.abs().sum() > 0
     assert model.action_model.model.interval_timestep_encoder.timestep_embedder.linear_1.weight.grad is not None

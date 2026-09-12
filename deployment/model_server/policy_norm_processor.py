@@ -87,6 +87,16 @@ def _resolve_robot_type(
     if unnorm_key is not None and unnorm_key in robot_types:
         return unnorm_key
 
+    # Statistics are keyed by embodiment_tag, which may differ from the
+    # registry name (e.g. franka versus libero_franka_rollflow).
+    matches = []
+    for robot_type in robot_types:
+        tag = getattr(ROBOT_TYPE_CONFIG_MAP.get(robot_type), "embodiment_tag", None)
+        if unnorm_key is not None and getattr(tag, "value", tag) == unnorm_key:
+            matches.append(robot_type)
+    if len(matches) == 1:
+        return matches[0]
+
     raise ValueError(
         f"data_mix={data_mix!r} contains multiple robot_types {robot_types}. "
         "Pass `unnorm_key` matching one of them to disambiguate "

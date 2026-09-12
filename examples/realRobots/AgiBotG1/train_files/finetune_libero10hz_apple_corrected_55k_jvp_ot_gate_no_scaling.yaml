@@ -1,0 +1,97 @@
+run_id: libero10hz_pick_up_the_apple_jvp_ot_gate_no_scaling_55k_20k_v1
+run_root_dir: /data/tzq/starVLA_checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starVLA_agibot_g1
+is_debug: false
+version_id: "0.21"
+
+framework:
+  name: QwenGR00TRollFlow
+  qwenvl:
+    base_vlm: /data/tzq/datasets/starVLA/playground/Pretrained_models/Qwen3.5-0.8B
+    attn_implementation: sdpa
+  action_model:
+    action_model_type: DiT-B
+    hidden_size: 1024
+    add_pos_embed: true
+    max_seq_len: 1024
+    action_dim: 7
+    state_dim: 0
+    default_embodiment: franka
+    embodiments:
+      agibot-g1:
+        action_dim: 22
+        state_dim: 22
+    teacher_clip: 2.0
+    action_horizon: 32
+    execution_horizon: 8
+    repeated_diffusion_steps: 4
+    finite_difference_delta: 0.01
+    p_k1: 0.7
+    p_fm: 0.5
+    fm_curriculum_steps: 500
+    inference_steps: 4
+    w_fm: 1.0
+    w_lsd: 0.1
+    use_ot: true
+    lsd_estimator: jvp
+    use_lsd_scaling: false
+    use_lsd_gate: true
+    iterative_cold_start: true
+    reset_cache_each_step: false
+    num_timestep_buckets: 1000
+    num_target_vision_tokens: 32
+    diffusion_model_cfg:
+      dropout: 0.0
+      final_dropout: false
+      interleave_self_attention: true
+      norm_type: ada_norm
+      num_layers: 16
+      positional_embeddings: null
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    include_state: true
+    data_root_dir: /data/tzq/datasets/starVLA/Datasets
+    data_mix: libero10hz_pick_up_the_apple_corrected
+    action_mode: abs
+    sequential_step_sampling: false
+    per_device_batch_size: 32
+    balance_dataset_weights: false
+    balance_trajectory_weights: false
+    load_all_data_for_training: false
+    obs_image_size: [224, 224]
+    video_backend: torchvision_av
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
+
+trainer:
+  is_resume: false
+  pretrained_checkpoint: /data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt
+  reload_modules: qwen_vl_interface,action_model.model,action_model.future_tokens,action_model.position_embedding,action_model.action_encoder,action_model.action_decoder
+  max_train_steps: 20000
+  num_warmup_steps: 1000
+  save_interval: 1000
+  eval_interval: 1000
+  learning_rate:
+    base: 1.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 5.0e-07
+  freeze_modules: qwen_vl_interface
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 20
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  gradient_checkpointing: true
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

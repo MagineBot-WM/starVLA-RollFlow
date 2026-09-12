@@ -41,9 +41,30 @@ def test_agibot_g1_data_contract_and_local_logical_task_weight():
     assert public_weight == 16.0
     assert real_weight == 1.0
 
+    corrected = module.DATASET_NAMED_MIXTURES[
+        "libero10hz_pick_up_the_apple_corrected"
+    ]
+    assert corrected[-1] == (
+        "agibot-g1-apple-corrected",
+        0.7,
+        "agibot-g1-apple",
+    )
+
 
 def test_agibot_g1_has_stable_embedding_id():
     assert EMBODIMENT_TAG_MAPPING[EmbodimentTag.AGIBOT_G1.value] == 11
+
+
+def test_apple_export_order_matches_canonical_contract():
+    module = _load(
+        "agibot_g1_apple_prepare_test",
+        "examples/realRobots/AgiBotG1/dataset_tools/prepare_apple.py",
+    )
+    assert module.ORDER.tolist() == [
+        0, 1, 2, 3, 4, 5, 6,
+        8, 9, 10, 11, 12, 13, 14,
+        18, 19, 16, 17, 7, 15,
+    ]
 
 
 def test_agibot_g1_eval_contract_and_gripper_calibration():

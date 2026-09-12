@@ -1,0 +1,12 @@
+{
+  "1_step_chamfer": 0.05531516671180725,
+  "1_step_mean_radius": 1.013512372970581,
+  "2_step_chamfer": 0.053771354258060455,
+  "2_step_mean_radius": 1.0031054019927979,
+  "4_step_chamfer": 0.047628965228796005,
+  "4_step_mean_radius": 0.9858897924423218,
+  "8_step_chamfer": 0.0390026718378067,
+  "8_step_mean_radius": 0.9949015974998474,
+  "16_step_chamfer": 0.03665938973426819,
+  "16_step_mean_radius": 1.000826120376587
+}

@@ -2,30 +2,39 @@
 
 Core training algorithm
 -----------------------
+    # 1. Sample a batch of source/target pairs (x0, x1) from the action trajectory.
     s, t = sample_training_times()
     x_s = (1-s) * x0 + s * x1
     x_t = (1-t) * x0 + t * x1
     v_gt = x1 - x0
 
-    # Build the stop-gradient teacher path for LSD rows first.
+    # 2. Build the stop-gradient teacher path for the full batch.
     with no_grad:
-        V_st = model(x_s, s, t)
-        X_t_hat = x_s + (t-s) * V_st
+        u_st = model(x_s, s, t)
+        X_t_hat = x_s + (t-s) * u_st
         v_teacher = model(X_t_hat, t, t)
 
-    # Pack tangent endpoints for LSD rows and local FM for the full batch.
-    V_minus, V_plus, v_local = model(
+    # 3. Pack tangent endpoints and local FM for the full batch.
+    u_minus, u_plus, v_instant = model(
         cat(x_s, x_s, x_t),
         cat(s, s, t),
         cat(t-delta, t+delta, t),
-    ).split(B_lsd, B_lsd, B)
-    X_minus = x_s + (t-delta-s) * V_minus
-    X_plus  = x_s + (t+delta-s) * V_plus
-    v_tangent = (X_plus - X_minus) / (2*delta)
+    ).chunk(3)
+    X_minus = x_s + (t-delta-s) * u_minus
+    X_plus  = x_s + (t+delta-s) * u_plus
+    v_tangent = (X_plus - X_minus) / (2.0*delta)
 
-    loss_fm  = MSE(v_local, v_gt)
-    loss_lsd = MSE(v_tangent, stopgrad(v_teacher))
-    loss = w_fm * loss_fm + w_lsd * loss_lsd
+    # 4. Compute the loss terms and apply the optional LSD gate.
+    loss_fm         = MSE(v_instant, v_gt)
+    loss_fm_active  = MSE(v_instant, v_gt, active rows)
+    loss_lsd_metric = MSE(v_tangent, stopgrad(v_teacher), active rows)
+    loss_lsd_raw    = 2*delta * loss_lsd_metric  # optional legacy-safe scaling
+    lsd_budget = w_lsd * stopgrad(loss_fm_active)
+    mask = isfinite(loss_lsd_raw) ∧ (loss_lsd_raw ≤ lsd_budget)  # use_lsd_gate=True
+    loss = loss_fm + where(mask, loss_lsd_raw, 0)
+
+With ``use_lsd_gate=False``, the finite LSD term is added directly and the
+detached FM budget is not used; ``loss_fm_active`` remains a diagnostic only.
 
 Time convention
 ---------------
@@ -60,14 +69,19 @@ sample gives s=ratio*t.  An FM-only curriculum starts with s=t and anneals to
 the configured mixture probability.  Deployment still uses the exact rolling
 staircase needed for cache alignment.
 
-There is no JVP, CSF, Split loss, persistent training cache, or adjacent-window
-training sampler.  Rolling state exists only at inference.
+The default LSD estimator is the packed central difference above.  An optional
+JVP estimator computes the same tangent of ``X_{s,t}`` exactly with forward-mode
+automatic differentiation for controlled estimator ablations.  There is no CSF,
+Split loss, persistent training cache, or adjacent-window training sampler.
+Rolling state exists only at inference.
 """
 
 from __future__ import annotations
 
+import math
+from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import torch
 from torch import Tensor, nn
@@ -91,10 +105,23 @@ class RollFlowConfig:
     fm_curriculum_steps: int = 5000
 
     w_fm: float = 1.0
-    w_lsd: float = 0.5
+    w_lsd: float = 0.1
     use_ot: bool = True
+    # Keep the production default on the packed finite-difference path.  The
+    # JVP path is exposed for controlled estimator comparisons only.
+    lsd_estimator: str = "finite_difference"
+    # Remove the explicit central-difference gradient amplification.  Keep
+    # this configurable so the unscaled historical objective can be measured
+    # as a controlled ablation.
+    use_lsd_scaling: bool = True
+    # Separately control the finite, detached FM-budget suppression for LSD.
+    use_lsd_gate: bool = True
+    action_loss_weights: Optional[Sequence[float]] = None
 
     clip_velocity: float = 0.0
+    # Retained for backwards-compatible configs, but disabled in the current
+    # objective; teacher-target clipping is not used as a stabilizer.
+    teacher_clip: float = 0.0
     iterative_cold_start: bool = False
     reset_cache_each_step: bool = False
 
@@ -107,8 +134,30 @@ class RollFlowConfig:
             raise ValueError("finite_difference_delta must be in (0, 0.5)")
         if self.w_fm < 0 or self.w_lsd < 0:
             raise ValueError("loss weights must be non-negative")
+        if self.lsd_estimator not in {"finite_difference", "jvp"}:
+            raise ValueError("lsd_estimator must be 'finite_difference' or 'jvp'")
+        if self.lsd_estimator == "jvp" and self.use_lsd_scaling:
+            raise ValueError(
+                "use_lsd_scaling must be False when lsd_estimator='jvp'; "
+                "the 2*delta scaling is specific to central differences"
+            )
         if self.clip_velocity < 0:
             raise ValueError("clip_velocity must be non-negative")
+        if self.action_loss_weights is not None:
+            weights = tuple(float(weight) for weight in self.action_loss_weights)
+            if len(weights) != self.action_dim:
+                raise ValueError(
+                    "action_loss_weights must have one entry per action dimension"
+                )
+            if any(not math.isfinite(weight) or weight < 0 for weight in weights):
+                raise ValueError("action_loss_weights must be finite and non-negative")
+            mean = sum(weights) / len(weights)
+            if mean <= 0:
+                raise ValueError("action_loss_weights must contain a positive value")
+            # Keep the overall loss scale unchanged when reweighting groups.
+            self.action_loss_weights = tuple(weight / mean for weight in weights)
+        if not 0 <= self.teacher_clip < float("inf"):
+            raise ValueError("teacher_clip must be finite and non-negative (0 disables clipping)")
         if not 0.0 <= self.p_k1 <= 1.0:
             raise ValueError("p_k1 must lie in [0, 1]")
         if not 0.0 <= self.p_fm <= 1.0:
@@ -179,31 +228,6 @@ def flow_map(x_s: Tensor, s: Tensor, t: Tensor, velocity: Tensor) -> Tensor:
     return x_s.float() + (t - s).float() * velocity.float()
 
 
-def _flow_matching_objective(
-    model: nn.Module,
-    x_t: Tensor,
-    t: Tensor,
-    v_gt: Tensor,
-    *,
-    context: Optional[Tensor],
-    pad: Optional[Tensor],
-    weight: float,
-    model_kwargs: dict[str, Any],
-) -> tuple[Tensor, dict[str, Tensor]]:
-    """Compute the ordinary FM objective without constructing LSD branches."""
-    v_local = _predict(model, x_t, t, t, context, model_kwargs)
-    fm_loss = masked_mse(v_local - v_gt, pad=pad)
-    zero = fm_loss.detach().new_zeros(())
-    return weight * fm_loss, {
-        "fm_loss": fm_loss.detach(),
-        "lsd_loss": zero,
-        "active_lsd_frac": zero,
-        "v_local_abs": v_local.detach().abs().mean(),
-        "v_tangent_abs": zero,
-        "v_teacher_abs": zero,
-    }
-
-
 def central_difference_lsd(
     model: nn.Module,
     x0: Tensor,
@@ -216,7 +240,12 @@ def central_difference_lsd(
     context: Optional[Tensor] = None,
     pad: Optional[Tensor] = None,
     w_fm: float = 1.0,
-    w_lsd: float = 0.5,
+    w_lsd: float = 0.1,
+    lsd_estimator: str = "finite_difference",
+    use_lsd_scaling: bool = True,
+    use_lsd_gate: bool = True,
+    teacher_clip: float = 0.0,
+    action_loss_weights: Optional[Tensor] = None,
     model_kwargs: Optional[dict[str, Any]] = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
     """Memory-efficient forwards implementing the paper-style objective.
@@ -224,17 +253,37 @@ def central_difference_lsd(
     ``active`` marks tokens that carry a finite off-diagonal interval.  Diagonal
     staircase tokens still receive FM supervision but are excluded from LSD.
     Teacher-only branches run without autograd; this changes memory use, not the
-    predicted values or objective.
+    predicted values or objective. Optional teacher clipping is retained only
+    for backwards compatibility (zero disables it); the production objective
+    leaves it off.  The LSD
+    metric is scaled by ``2*delta`` (when ``use_lsd_scaling`` is true) to remove
+    the explicit central-difference gradient amplification, then hard-masked when
+    ``use_lsd_gate`` is true and it is non-finite or exceeds the detached
+    active-FM budget ``w_lsd * loss_fm_active``.  Both quantities are already
+    reduced by ``masked_mse``; the gate is therefore one aggregate decision per
+    local rank, not a per-sample decision.  With the gate disabled, finite LSD
+    values are added directly; non-finite values are safely dropped.  The
+    The ``jvp`` estimator computes the tangent of the same flow endpoint directly
+    and therefore must not use the finite-difference ``2*delta`` scaling.
     """
     kwargs = {} if model_kwargs is None else model_kwargs
     delta = float(delta)
+    if w_fm < 0 or w_lsd < 0:
+        raise ValueError("w_fm and w_lsd must be non-negative")
+    if lsd_estimator not in {"finite_difference", "jvp"}:
+        raise ValueError("lsd_estimator must be 'finite_difference' or 'jvp'")
+    if lsd_estimator == "jvp" and use_lsd_scaling:
+        raise ValueError(
+            "use_lsd_scaling must be False when lsd_estimator='jvp'; "
+            "the 2*delta scaling is specific to central differences"
+        )
+    if not 0 <= teacher_clip < float("inf"):
+        raise ValueError("teacher_clip must be finite and non-negative")
     active = _lsd_mask(s, t, delta) if active is None else active.bool()
     _validate_training_inputs(x0, x1, s, t, active, pad)
     _validate_times(s, t, delta, active)
 
-    # Padding is a loss concern, not a property of the sampled time pair.
-    # Removing it here also prevents fully padded rows from entering any of
-    # the expensive teacher/tangent branches.
+    # Padding and interval validity only mask the loss; all rows run all branches.
     loss_active = active
     if pad is not None:
         loss_active = active & ~pad.bool().unsqueeze(-1)
@@ -243,74 +292,107 @@ def central_difference_lsd(
     x_t = lerp_path(x0, x1, t)
     v_gt = x1.float() - x0.float()
 
-    # At the start of the curriculum every token is diagonal, so this is
-    # exactly ordinary flow matching and needs only one model forward.
-    if not bool(loss_active.any()):
-        return _flow_matching_objective(
-            model,
-            x_t,
-            t,
-            v_gt,
-            context=context,
-            pad=pad,
-            weight=w_fm,
-            model_kwargs=kwargs,
-        )
-
-    # Exclude FM-only samples from every teacher and tangent forward. Local FM
-    # still sees the complete batch.
-    lsd_rows = loss_active.flatten(1).any(dim=1)
-    x_s_lsd = x_s[lsd_rows]
-    s_lsd = s[lsd_rows]
-    t_lsd = t[lsd_rows]
-    active_lsd = loss_active[lsd_rows]
-    context_lsd = select_batch(context, lsd_rows, x0.shape[0])
-    kwargs_lsd = select_batch(kwargs, lsd_rows, x0.shape[0])
-
-    # Inactive tokens inside an LSD sample stay diagonal instead of creating
-    # invalid backward maps with t-delta < s.
-    t_minus = torch.where(active_lsd, t_lsd - delta, t_lsd)
-    t_plus = torch.where(active_lsd, t_lsd + delta, t_lsd)
-
     # -------------------------------------------------------------------------
     # 1. Inference-only self-teacher path
     # -------------------------------------------------------------------------
     # Compute this path before constructing the student graph so its temporary
     # activations are released immediately.
     with torch.no_grad():
-        V_st = _predict(model, x_s_lsd, s_lsd, t_lsd, context_lsd, kwargs_lsd)
-        X_t_hat = flow_map(x_s_lsd, s_lsd, t_lsd, V_st)
-        v_teacher = _predict(model, X_t_hat, t_lsd, t_lsd, context_lsd, kwargs_lsd)
+        V_st = _predict(model, x_s, s, t, context, kwargs)
+        X_t_hat = flow_map(x_s, s, t, V_st)
+        v_teacher = _predict(model, X_t_hat, t, t, context, kwargs)
+        # Clipping bounds finite targets; it cannot repair a nonfinite teacher.
+        if not bool(torch.isfinite(v_teacher).all()):
+            raise FloatingPointError("Nonfinite RollFlow teacher prediction")
+        if not bool(torch.isfinite(v_gt).all()):
+            raise FloatingPointError("Nonfinite RollFlow ground truth")
+        teacher_clip_frac = v_teacher.new_zeros(())
+        if teacher_clip > 0:
+            teacher_clip_frac = masked_mean((v_teacher.abs() > teacher_clip).float(), loss_active)
+            v_teacher = v_teacher.clamp(-teacher_clip, teacher_clip)
 
     # -------------------------------------------------------------------------
-    # 2. Gradient-bearing tangent endpoints + local FM prediction
+    # 2. Gradient-bearing tangent + local FM prediction
     # -------------------------------------------------------------------------
-    # Pack 2*B_lsd tangent predictions with the B-sized local FM prediction.
-    # This retains less graph memory than an unconditional 3B forward.
-    V_minus, V_plus, v_local = _parallel_student_predictions(
-        model, x_s, x_t, s, t, t_minus, t_plus, context, kwargs, lsd_rows
-    )
+    if lsd_estimator == "finite_difference":
+        # Leave inactive target times unperturbed to avoid t-delta < s or
+        # t+delta > 1.  One packed 3B student forward covers all branches.
+        t_minus = torch.where(loss_active, t - delta, t)
+        t_plus = torch.where(loss_active, t + delta, t)
+        V_minus, V_plus, v_local = _parallel_student_predictions(
+            model, x_s, x_t, s, t, t_minus, t_plus, context, kwargs
+        )
+        X_minus = flow_map(x_s, s, t_minus, V_minus)
+        X_plus = flow_map(x_s, s, t_plus, V_plus)
+        v_tangent = (X_plus - X_minus) / (2.0 * delta)
+    else:
+        # The JVP direction reproduces the packed finite-difference perturbation:
+        # all valid (non-padded) target-time tokens move together while source
+        # time and x_s stay fixed.
+        v_tangent, v_local = _jvp_student_predictions(
+            model, x_s, x_t, s, t, loss_active, context, kwargs
+        )
 
-    X_minus = flow_map(x_s_lsd, s_lsd, t_minus, V_minus)
-    X_plus = flow_map(x_s_lsd, s_lsd, t_plus, V_plus)
-    v_tangent = (X_plus - X_minus) / (2.0 * delta)
-
-    loss_fm = masked_mse(v_local - v_gt, pad=pad)
-    pad_lsd = None if pad is None else pad[lsd_rows]
-    loss_lsd = masked_mse(
-        v_tangent - v_teacher,
-        pad=pad_lsd,
-        valid=active_lsd,
+    fm_error = v_local - v_gt
+    loss_fm = masked_mse(
+        fm_error,
+        pad=pad,
+        action_loss_weights=action_loss_weights,
     )
-    loss = w_fm * loss_fm + w_lsd * loss_lsd
+    loss_fm_active = masked_mse(
+        fm_error,
+        pad=pad,
+        valid=loss_active,
+        action_loss_weights=action_loss_weights,
+    )
+    loss_lsd_metric = masked_mse(
+        v_tangent - v_teacher.detach(),
+        pad=pad,
+        valid=loss_active,
+        action_loss_weights=action_loss_weights,
+    )
+    loss_lsd_raw = (
+        (2.0 * delta) * loss_lsd_metric
+        if use_lsd_scaling
+        else loss_lsd_metric
+    )
+    # ``w_lsd`` is the legacy config name for this budget ratio.  Keep the
+    # semantic name local so the comparison is explicit and self-documenting.
+    lsd_budget_ratio = float(w_lsd)
+    lsd_budget = lsd_budget_ratio * loss_fm_active.detach()
+    lsd_finite = torch.isfinite(loss_lsd_raw)
+    lsd_keep = (
+        lsd_finite & (loss_lsd_raw <= lsd_budget)
+        if use_lsd_gate
+        else lsd_finite
+    )
+    # ``where`` is essential here: NaN/Inf multiplied by a zero mask remains
+    # NaN/Inf.  The false branch is a graph-connected zero and contributes no
+    # loss or gradient for non-finite or over-budget LSD values.
+    safe_lsd_raw = torch.nan_to_num(loss_lsd_raw, nan=0.0, posinf=0.0, neginf=0.0)
+    loss_lsd = torch.where(lsd_keep, safe_lsd_raw, torch.zeros_like(safe_lsd_raw))
+    loss = w_fm * loss_fm + loss_lsd
 
     return loss, {
         "fm_loss": loss_fm.detach(),
+        "fm_loss_active": loss_fm_active.detach(),
         "lsd_loss": loss_lsd.detach(),
+        "lsd_loss_raw": loss_lsd_raw.detach(),
+        "lsd_loss_metric": loss_lsd_metric.detach(),
+        "lsd_jvp_enabled": loss_lsd_raw.new_tensor(
+            float(lsd_estimator == "jvp")
+        ).detach(),
+        "lsd_scaling_enabled": loss_lsd_raw.new_tensor(float(use_lsd_scaling)).detach(),
+        "lsd_gate_active": (~lsd_keep).to(loss_lsd_raw.dtype).detach(),
+        "lsd_gate_enabled": loss_lsd_raw.new_tensor(float(use_lsd_gate)).detach(),
+        "lsd_finite_frac": lsd_finite.to(loss_lsd_raw.dtype).detach(),
+        "lsd_keep_frac": lsd_keep.to(loss_lsd_raw.dtype).detach(),
+        "lsd_budget": lsd_budget.detach(),
         "active_lsd_frac": loss_active.float().mean().detach(),
         "v_local_abs": v_local.detach().abs().mean(),
-        "v_tangent_abs": masked_mean(v_tangent.detach().abs(), active_lsd),
-        "v_teacher_abs": masked_mean(v_teacher.abs(), active_lsd),
+        "v_tangent_abs": masked_mean(v_tangent.detach().abs(), loss_active),
+        "v_teacher_abs": masked_mean(v_teacher.abs(), loss_active),
+        "teacher_clip_frac": teacher_clip_frac,
     }
 
 
@@ -458,7 +540,12 @@ class StaircaseTimeSampler:
 
 def _lsd_mask(s: Tensor, t: Tensor, delta: float) -> Tensor:
     delta = float(delta)
-    return ((t - s) > delta + 1e-6) & (t + delta <= 1.0 + 1e-6)
+    # Reuse the same gap expression as ``_validate_times``.  Computing the
+    # equivalent ``s >= t - delta`` predicate separately can disagree with
+    # this comparison for a float32 sample lying right on the threshold.
+    gap = t - s
+    tol = 1e-6
+    return (gap > delta + tol) & (t + delta <= 1.0 - tol)
 
 
 def _validate_times(s: Tensor, t: Tensor, delta: float, active: Tensor) -> None:
@@ -467,9 +554,10 @@ def _validate_times(s: Tensor, t: Tensor, delta: float, active: Tensor) -> None:
         raise ValueError("s and t must have identical shapes")
     if bool((s < -tol).any()) or bool((t > 1.0 + tol).any()) or bool((s > t + tol).any()):
         raise ValueError("require 0 <= s <= t <= 1")
-    if bool((active & (s >= t - delta - tol)).any()):
+    gap = t - s
+    if bool((active & (gap <= float(delta) + tol)).any()):
         raise ValueError("active LSD tokens require s < t-delta")
-    if bool((active & (t + delta > 1.0 + tol)).any()):
+    if bool((active & (t + float(delta) > 1.0 - tol)).any()):
         raise ValueError("active LSD tokens require t+delta <= 1")
 
 
@@ -506,6 +594,75 @@ def _predict(
     return out
 
 
+def _jvp_student_predictions(
+    model,
+    x_s,
+    x_t,
+    s,
+    t,
+    loss_active,
+    context,
+    kwargs,
+):
+    """Compute the endpoint tangent with differentiable forward-mode AD.
+
+    ``central_difference_lsd`` perturbs only target times for valid tokens,
+    keeping ``x_s`` and source times fixed.  Differentiating
+    ``X_{s,t}=x_s+(t-s)u(x_s,s,t)`` in that same direction gives an estimator
+    with the identical mathematical target but without the explicit
+    ``1/(2*delta)`` finite-difference factor.
+    """
+    # ``torch.func.jvp`` is the modern transform, but its bf16 + math-SDPA
+    # backward path currently fails in this model with a SafeSoftmax dtype
+    # mismatch.  ``autograd.functional.jvp(create_graph=True)`` uses the same
+    # forward-mode derivative while retaining a graph that can be differentiated
+    # by the outer loss, which is required because LSD is a training objective.
+    from torch.autograd.functional import jvp
+    # PyTorch's fused SDPA kernels do not currently implement forward-mode AD
+    # (and some do not implement the required second derivative either).  The
+    # math kernel is the reference-compatible fallback for the JVP branch;
+    # ordinary finite-difference/teacher forwards keep their configured path.
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    direction = loss_active.to(dtype=t.dtype)
+    # The framework intentionally disables its outer autocast around the
+    # action head.  Re-enable it locally for low-precision checkpoints so the
+    # float32 RollFlow state/time tensors are cast before entering bf16/fp16
+    # linear projections.  Without this, the JVP path fails at the first DiT
+    # feed-forward layer with a mat1/mat2 dtype mismatch.
+    model_module = getattr(model, "__self__", None)
+    parameter_dtype = (
+        next(model_module.parameters()).dtype
+        if isinstance(model_module, nn.Module)
+        else x_s.dtype
+    )
+    use_autocast = (
+        x_s.device.type in {"cuda", "cpu"}
+        and parameter_dtype in {torch.float16, torch.bfloat16}
+    )
+    autocast_context = (
+        torch.autocast(x_s.device.type, dtype=parameter_dtype)
+        if use_autocast
+        else nullcontext()
+    )
+
+    def endpoint(target_time):
+        velocity = _predict(model, x_s, s, target_time, context, kwargs)
+        return flow_map(x_s, s, target_time, velocity)
+
+    with autocast_context:
+        with sdpa_kernel(SDPBackend.MATH):
+            _, v_tangent = jvp(
+                endpoint,
+                (t,),
+                (direction,),
+                create_graph=True,
+                strict=False,
+            )
+        v_local = _predict(model, x_t, s, t, context, kwargs)
+    return v_tangent, v_local
+
+
 def _parallel_student_predictions(
     model,
     x_s,
@@ -516,54 +673,29 @@ def _parallel_student_predictions(
     t_plus,
     context,
     kwargs,
-    lsd_rows,
 ):
     B = x_s.shape[0]
-    B_lsd = t_minus.shape[0]
     out = _predict(
         model,
-        torch.cat((x_s[lsd_rows], x_s[lsd_rows], x_t), dim=0),
-        torch.cat((s[lsd_rows], s[lsd_rows], t), dim=0),
+        torch.cat((x_s, x_s, x_t), dim=0),
+        torch.cat((s, s, t), dim=0),
         torch.cat((t_minus, t_plus, t), dim=0),
-        merge_lsd_and_full_batch(context, lsd_rows, B),
-        merge_lsd_and_full_batch(kwargs, lsd_rows, B),
+        repeat_batch(context, 3, B),
+        repeat_batch(kwargs, 3, B),
     )
-    return out.split((B_lsd, B_lsd, B), dim=0)
+    return out.chunk(3, dim=0)
 
 
-def select_batch(value: Any, rows: Tensor, batch: int) -> Any:
-    """Select batch-aligned tensors recursively; leave constants unchanged."""
-    if value is None:
-        return None
+def repeat_batch(value: Any, repeats: int, batch: int) -> Any:
+    """Repeat batch-aligned tensors recursively; leave constants unchanged."""
     if torch.is_tensor(value):
-        return value[rows] if value.ndim and value.shape[0] == batch else value
+        return torch.cat([value] * repeats, dim=0) if value.ndim and value.shape[0] == batch else value
     if isinstance(value, dict):
-        return {key: select_batch(item, rows, batch) for key, item in value.items()}
+        return {key: repeat_batch(item, repeats, batch) for key, item in value.items()}
     if isinstance(value, tuple):
-        return tuple(select_batch(item, rows, batch) for item in value)
+        return tuple(repeat_batch(item, repeats, batch) for item in value)
     if isinstance(value, list):
-        return [select_batch(item, rows, batch) for item in value]
-    return value
-
-
-def merge_lsd_and_full_batch(value: Any, rows: Tensor, batch: int) -> Any:
-    """Build the [LSD-, LSD+, full-FM] batch recursively."""
-    if value is None:
-        return None
-    if torch.is_tensor(value):
-        if value.ndim and value.shape[0] == batch:
-            selected = value[rows]
-            return torch.cat((selected, selected, value), dim=0)
-        return value
-    if isinstance(value, dict):
-        return {
-            key: merge_lsd_and_full_batch(item, rows, batch)
-            for key, item in value.items()
-        }
-    if isinstance(value, tuple):
-        return tuple(merge_lsd_and_full_batch(item, rows, batch) for item in value)
-    if isinstance(value, list):
-        return [merge_lsd_and_full_batch(item, rows, batch) for item in value]
+        return [repeat_batch(item, repeats, batch) for item in value]
     return value
 
 
@@ -572,8 +704,18 @@ def masked_mse(
     *,
     pad: Optional[Tensor] = None,
     valid: Optional[Tensor] = None,
+    action_loss_weights: Optional[Tensor] = None,
 ) -> Tensor:
-    loss = error.float().pow(2).mean(dim=-1)
+    squared_error = error.float().pow(2)
+    if action_loss_weights is None:
+        loss = squared_error.mean(dim=-1)
+    else:
+        weights = action_loss_weights.to(device=error.device, dtype=squared_error.dtype)
+        if weights.ndim != 1 or weights.shape[0] != error.shape[-1]:
+            raise ValueError(
+                "action_loss_weights must have shape [action_dim] matching error"
+            )
+        loss = (squared_error * weights).sum(dim=-1) / weights.sum().clamp_min(1e-12)
     mask = torch.ones_like(loss, dtype=torch.bool)
     if pad is not None:
         mask &= ~pad.bool()
@@ -687,13 +829,37 @@ class RollFlow:
             pad=pad,
             w_fm=cfg.w_fm,
             w_lsd=cfg.w_lsd,
+            lsd_estimator=cfg.lsd_estimator,
+            use_lsd_scaling=cfg.use_lsd_scaling,
+            use_lsd_gate=cfg.use_lsd_gate,
+            teacher_clip=cfg.teacher_clip,
+            action_loss_weights=(
+                None
+                if cfg.action_loss_weights is None
+                else torch.as_tensor(
+                    cfg.action_loss_weights,
+                    device=x.device,
+                    dtype=torch.float32,
+                )
+            ),
             model_kwargs=model_kwargs,
         )
 
         return loss, {
             "loss": float(loss.detach().cpu()),
             "fm_loss": float(stats["fm_loss"].cpu()),
+            "fm_loss_active": float(stats["fm_loss_active"].cpu()),
             "lsd_loss": float(stats["lsd_loss"].cpu()),
+            "lsd_loss_raw": float(stats["lsd_loss_raw"].cpu()),
+            "lsd_loss_metric": float(stats["lsd_loss_metric"].cpu()),
+            "lsd_jvp_enabled": float(stats["lsd_jvp_enabled"].cpu()),
+            "lsd_scaling_enabled": float(stats["lsd_scaling_enabled"].cpu()),
+            "lsd_gate_active": float(stats["lsd_gate_active"].cpu()),
+            "lsd_gate_enabled": float(stats["lsd_gate_enabled"].cpu()),
+            "lsd_finite_frac": float(stats["lsd_finite_frac"].cpu()),
+            "lsd_keep_frac": float(stats["lsd_keep_frac"].cpu()),
+            "lsd_budget": float(stats["lsd_budget"].cpu()),
+            "teacher_clip_frac": float(stats["teacher_clip_frac"].cpu()),
             "active_lsd_frac": float(stats["active_lsd_frac"].cpu()),
             "num_time_groups": times.num_time_groups,
             "train_block_size": times.block_size,

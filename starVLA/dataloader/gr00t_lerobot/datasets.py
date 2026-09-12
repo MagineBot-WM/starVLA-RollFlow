@@ -2656,7 +2656,10 @@ class LeRobotMixtureDataset(Dataset):
         for tag, metadatas in all_metadatas.items():
             self.merged_metadata[tag] = self.merge_metadata(
                 metadatas=metadatas,
-                dataset_sampling_weights=self.dataset_sampling_weights.tolist(),
+                dataset_sampling_weights=[
+                    float(weight) for dataset, weight in zip(self.datasets, self.dataset_sampling_weights)
+                    if dataset.tag == tag
+                ],
                 percentile_mixing_method=metadata_config["percentile_mixing_method"],
             )
         for dataset in self.datasets:

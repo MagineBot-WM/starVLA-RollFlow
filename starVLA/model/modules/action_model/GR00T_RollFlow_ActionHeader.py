@@ -1,7 +1,8 @@
 # Copyright 2025 NVIDIA Corp. and affiliates. All rights reserved.
 # Modified for starVLA RollFlow integration.
 
-from typing import Optional
+from typing import Optional, Sequence
+from dataclasses import replace
 
 import torch
 import torch.nn.functional as F
@@ -53,8 +54,12 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         p_fm: float = 0.3,
         fm_curriculum_steps: int = 5000,
         w_fm: float = 1.0,
-        w_lsd: float = 0.5,
+        w_lsd: float = 0.1,
         use_ot: bool = True,
+        lsd_estimator: str = "finite_difference",
+        use_lsd_scaling: bool = True,
+        use_lsd_gate: bool = True,
+        action_loss_weights: Optional[Sequence[float]] = None,
         clip_velocity: float = 0.0,
         iterative_cold_start: bool = False,
         reset_cache_each_step: bool = False,
@@ -80,6 +85,10 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         self.w_fm = w_fm
         self.w_lsd = w_lsd
         self.use_ot = use_ot
+        self.lsd_estimator = lsd_estimator
+        self.use_lsd_scaling = use_lsd_scaling
+        self.use_lsd_gate = use_lsd_gate
+        self.action_loss_weights = action_loss_weights
         self.clip_velocity = clip_velocity
         self.iterative_cold_start = iterative_cold_start
         self.reset_cache_each_step = reset_cache_each_step
@@ -93,6 +102,8 @@ DiTConfig = {
 
 def _first_config_value(config, names, default=None):
     for name in names:
+        if isinstance(config, dict) and name in config:
+            return config[name]
         value = getattr(config, name, None)
         if value is not None:
             return value
@@ -107,6 +118,9 @@ class RollFlowActionHead(nn.Module):
         config = full_config.framework.action_model
         self.full_config = full_config
         self.config = config
+        # Fail explicitly for old experiment configs rather than mislabel results.
+        if getattr(config, "inference_decoder", "rollflow") != "rollflow":
+            raise ValueError("This action head supports rolling inference only")
 
         try:
             model_defaults = DiTConfig[config.action_model_type]
@@ -163,9 +177,22 @@ class RollFlowActionHead(nn.Module):
                     _first_config_value(config, ("fm_curriculum_steps",), 5000)
                 ),
                 w_fm=float(_first_config_value(config, ("w_fm",), 1.0)),
-                w_lsd=float(_first_config_value(config, ("w_lsd",), 0.5)),
+                w_lsd=float(_first_config_value(config, ("w_lsd",), 0.1)),
                 use_ot=bool(_first_config_value(config, ("use_ot",), True)),
+                lsd_estimator=str(
+                    _first_config_value(config, ("lsd_estimator",), "finite_difference")
+                ),
+                use_lsd_scaling=bool(
+                    _first_config_value(config, ("use_lsd_scaling",), True)
+                ),
+                use_lsd_gate=bool(_first_config_value(config, ("use_lsd_gate",), True)),
+                action_loss_weights=_first_config_value(
+                    config, ("action_loss_weights",), None
+                ),
                 clip_velocity=float(_first_config_value(config, ("clip_velocity",), 0.0)),
+                # Teacher-target clipping is disabled in the current objective;
+                # retain the lookup so old serialized configs remain readable.
+                teacher_clip=float(_first_config_value(config, ("teacher_clip",), 0.0)),
                 iterative_cold_start=bool(
                     _first_config_value(config, ("iterative_cold_start",), False)
                 ),
@@ -175,6 +202,35 @@ class RollFlowActionHead(nn.Module):
             )
         )
         self.last_loss_stats = None
+        # Keep original LIBERO parameter names checkpoint-compatible. Only new
+        # embodiments need additional native-width adapters; the DiT stays shared.
+        self.default_embodiment = getattr(config, "default_embodiment", "franka")
+        self.adapters = nn.ModuleDict()
+        self.rollflows = {self.default_embodiment: self.rollflow}
+        for tag, spec in getattr(config, "embodiments", {}).items():
+            if tag == self.default_embodiment:
+                raise ValueError("embodiments must contain only additional embodiments")
+            native_action, native_state = int(spec["action_dim"]), int(spec["state_dim"])
+            self.adapters[tag] = nn.ModuleDict({
+                "state_encoder": MLP(native_state, hidden_size, self.input_embedding_dim),
+                "action_encoder": ActionEncoder(native_action, self.input_embedding_dim),
+                "action_decoder": MLP(self.model.config.output_dim, hidden_size, native_action),
+            })
+            self.rollflows[tag] = RollFlow(
+                replace(
+                    self.rollflow.cfg,
+                    action_dim=native_action,
+                    action_loss_weights=_first_config_value(
+                        spec, ("action_loss_weights",), None
+                    ),
+                )
+            )
+
+    def _native_module(self, name, embodiment):
+        tag = self.default_embodiment if embodiment is None else embodiment
+        if tag not in self.rollflows:
+            raise ValueError(f"Unknown embodiment: {tag}")
+        return getattr(self, name) if tag == self.default_embodiment else self.adapters[tag][name]
 
     def prepare_input(self, batch: dict) -> BatchFeature:
         return BatchFeature(data=batch)
@@ -187,12 +243,13 @@ class RollFlowActionHead(nn.Module):
         encoder_attention_mask=None,
         action_padding_mask: Optional[torch.Tensor] = None,
         training_step: int = 0,
+        embodiment: Optional[str] = None,
     ) -> torch.Tensor:
         """Return the scalar RollFlow objective for actions shaped ``[B,H,A]``."""
         if action_padding_mask is not None:
             action_padding_mask = action_padding_mask.to(device=actions.device)
-        state_features = self._encode_state(state)
-        loss, self.last_loss_stats = self.rollflow.loss(
+        state_features = self._encode_state(state, embodiment)
+        loss, self.last_loss_stats = self.rollflows[embodiment or self.default_embodiment].loss(
             self._predict_velocity,
             actions,
             step=training_step,
@@ -200,6 +257,7 @@ class RollFlowActionHead(nn.Module):
             pad=action_padding_mask,
             state_features=state_features,
             encoder_attention_mask=encoder_attention_mask,
+            embodiment=embodiment,
         )
         return loss
 
@@ -210,22 +268,25 @@ class RollFlowActionHead(nn.Module):
         state: Optional[torch.Tensor] = None,
         encoder_attention_mask=None,
         refinement_steps: Optional[int] = None,
+        embodiment: Optional[str] = None,
     ) -> torch.Tensor:
-        """Return the next executable chunk shaped ``[B,C,A]`` and update the cache."""
-        return self.rollflow.step(
+        """Advance the rolling cache and return the next [B,C,A] action chunk."""
+        return self.rollflows[embodiment or self.default_embodiment].step(
             self._predict_velocity,
             batch=vl_embs.shape[0],
             context=vl_embs,
             device=vl_embs.device,
             dtype=self.dtype,
             refinement_steps=refinement_steps,
-            state_features=self._encode_state(state),
+            state_features=self._encode_state(state, embodiment),
             encoder_attention_mask=encoder_attention_mask,
+            embodiment=embodiment,
         )
 
     def reset(self) -> None:
         """Clear rolling inference state at every episode/session boundary."""
-        self.rollflow.reset()
+        for flow in self.rollflows.values():
+            flow.reset()
 
     reset_cache = reset
 
@@ -233,17 +294,20 @@ class RollFlowActionHead(nn.Module):
     def cache_info(self):
         return self.rollflow.cache_info
 
-    def _encode_state(self, state: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+    def _encode_state(self, state: Optional[torch.Tensor], embodiment=None) -> Optional[torch.Tensor]:
+        encoder = self._native_module("state_encoder", embodiment)
         if state is None:
+            if embodiment in self.adapters:
+                raise ValueError(f"State required for embodiment {embodiment}")
             return None
-        if self.state_encoder is None:
+        if encoder is None:
             raise ValueError("state was provided but state_dim is disabled")
         state = state.to(device=self.device, dtype=self.dtype)
         if state.ndim == 2:
             state = state.unsqueeze(1)
         if state.ndim != 3:
             raise ValueError(f"state must have shape [B,S,D], got {tuple(state.shape)}")
-        return self.state_encoder(state)
+        return encoder(state)
 
     def _predict_velocity(
         self,
@@ -254,6 +318,7 @@ class RollFlowActionHead(nn.Module):
         *,
         state_features: Optional[torch.Tensor] = None,
         encoder_attention_mask=None,
+        embodiment=None,
     ) -> torch.Tensor:
         batch, horizon, _ = actions.shape
         source_time = self._action_times(source_time, batch, horizon)
@@ -264,7 +329,7 @@ class RollFlowActionHead(nn.Module):
         source_scaled = source_time * self.num_timestep_buckets
         target_scaled = target_time * self.num_timestep_buckets
 
-        action_features = self.action_encoder(actions, source_scaled)
+        action_features = self._native_module("action_encoder", embodiment)(actions, source_scaled)
         if self.config.add_pos_embed:
             if horizon > self.position_embedding.num_embeddings:
                 raise ValueError(f"action horizon {horizon} exceeds max_seq_len")
@@ -287,7 +352,7 @@ class RollFlowActionHead(nn.Module):
             start_timestep=source_scaled,
             return_all_hidden_states=False,
         )
-        return self.action_decoder(model_output[:, -horizon:]).float()
+        return self._native_module("action_decoder", embodiment)(model_output[:, -horizon:]).float()
 
     def _action_times(self, time: torch.Tensor, batch: int, horizon: int) -> torch.Tensor:
         if time.ndim == 3 and time.shape[-1] == 1:

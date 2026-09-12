@@ -177,6 +177,11 @@ class BasicTransformerBlock(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=encoder_attention_mask,  # @JinhuiYE original attention_mask=attention_mask
         )
+        # The math SDPA backend used by the forward-mode JVP path may return
+        # float32 intermediates even when the DiT runs in bf16.  Cast the
+        # attention result back before the residual so subsequent LayerNorm /
+        # MLP projections see the same dtype as their parameters.
+        attn_output = attn_output.to(dtype=hidden_states.dtype)
         if self.final_dropout:
             attn_output = self.final_dropout(attn_output)
 

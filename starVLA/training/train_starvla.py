@@ -339,7 +339,7 @@ class VLATrainer(TrainerUtils):
             for i, group in enumerate(self.optimizer.param_groups):
                 group_name = group.get("name", str(i))
                 metrics[f"learning_rate/{group_name}"] = last_lrs[i] if i < len(last_lrs) else last_lrs[-1]
-            metrics["epoch"] = round(self.completed_steps / len(self.vla_train_dataloader), 2)
+            metrics["epoch"] = round(self.completed_steps * self.accelerator.gradient_accumulation_steps / len(self.vla_train_dataloader), 2)
             if getattr(self, "_wandb_enabled", False):
                 try:
                     wandb.log(metrics, step=self.completed_steps)
@@ -397,6 +397,9 @@ class VLATrainer(TrainerUtils):
                     }
                 )
 
+            if not self.accelerator.sync_gradients:
+                continue
+
             if self.completed_steps % self.config.trainer.eval_interval == 0:
                 step_metrics = self.eval_action_model(step_metrics)
 
@@ -416,7 +419,9 @@ class VLATrainer(TrainerUtils):
         """Run simple action-eval on current batch and attach score to metrics."""
         step_metrics = {} if step_metrics is None else step_metrics
         examples = self._get_next_batch()
-        actions = [example["action"] for example in examples]
+        groups = {}
+        for example in examples:
+            groups.setdefault(example.get("robot_tag", "default"), []).append(example)
         model = _unwrap_model(self.accelerator, self.model)
         was_training = model.training
         reset = getattr(model, "reset", None)
@@ -424,25 +429,25 @@ class VLATrainer(TrainerUtils):
             reset()
         model.eval()
         try:
-            output_dict = model.predict_action(
-                examples=examples, use_ddim=True, num_ddim_steps=20
-            )
+            scores = []
+            for tag, group in groups.items():
+                output_dict = model.predict_action(examples=group)
+                predicted = output_dict["normalized_actions"]
+                targets = _align_action_targets(
+                    predicted, np.stack([e["action"] for e in group]),
+                    getattr(model, "action_horizon", predicted.shape[1]),
+                )
+                score = float(np.mean(np.square(predicted - targets)))
+                scores.append(score * len(group) / len(examples))
+                if self.accelerator.is_main_process:
+                    step_metrics[f"mse_score/{tag}"] = score
         finally:
             if callable(reset):
                 reset()
             model.train(was_training)
 
         if self.accelerator.is_main_process:
-            normalized_actions = output_dict["normalized_actions"]
-            action_horizon = getattr(model, "action_horizon", normalized_actions.shape[1])
-            targets = _align_action_targets(
-                normalized_actions,
-                np.asarray(actions),
-                action_horizon,
-            )
-            step_metrics["mse_score"] = float(
-                np.mean(np.square(normalized_actions - targets))
-            )
+            step_metrics["mse_score"] = sum(scores)
 
         del examples
         if dist.is_initialized():
@@ -524,6 +529,11 @@ class VLATrainer(TrainerUtils):
 
 def main(cfg) -> None:
     logger.info("VLA Training :: Warming Up")
+
+    # Keep Accelerate and DeepSpeed on the same accumulation schedule.
+    accelerator.gradient_accumulation_steps = int(cfg.trainer.get("gradient_accumulation_steps", 1))
+    if accelerator.state.deepspeed_plugin is not None:
+        accelerator.state.deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] = accelerator.gradient_accumulation_steps
 
     cfg = wrap_config(cfg)
     logger.info("✅ Configuration wrapped for access tracking")

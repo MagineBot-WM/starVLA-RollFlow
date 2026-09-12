@@ -254,6 +254,12 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
 
         loss = F.mse_loss(pred, target, reduction='none')
         loss = loss * loss_mask.type(loss.dtype)
+        action_loss_weights = batch.get('action_loss_weights', None)
+        if action_loss_weights is not None:
+            # Broadcast over batch and horizon; weights are applied to the
+            # normalized action channels only (the vendor policy has no other
+            # predicted channels when obs_as_global_cond=True).
+            loss = loss * action_loss_weights.to(device=loss.device, dtype=loss.dtype).view(1, 1, -1)
         loss = reduce(loss, 'b ... -> b (...)', 'mean')
         loss = loss.mean()
         return loss

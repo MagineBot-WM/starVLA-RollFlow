@@ -60,12 +60,6 @@ def _config(**overrides):
     return SimpleNamespace(framework=SimpleNamespace(action_model=SimpleNamespace(**values)))
 
 
-@pytest.mark.parametrize("decoder", ["meanflow", "euler"])
-def test_formal_head_rejects_experimental_decoder_configs(decoder):
-    with pytest.raises(ValueError, match="rolling inference only"):
-        RollFlowActionHead(_config(inference_decoder=decoder, meanflow_steps=5))
-
-
 def test_native_adapters_share_trunk_and_isolate_cache():
     cfg = _config(embodiments={"agibot-g1": {"state_dim": 22, "action_dim": 22}})
     head = RollFlowActionHead(cfg)
@@ -188,24 +182,6 @@ def test_rollflow_head_loss_backward_and_rolling_inference():
     reloaded = RollFlowActionHead(_config())
     reloaded.load_state_dict(model.state_dict(), strict=True)
     assert "model.interval_timestep_encoder.timestep_embedder.linear_1.weight" in model.state_dict()
-
-
-def test_rollflow_head_jvp_estimator_backward():
-    torch.manual_seed(0)
-    model = RollFlowActionHead(_config(lsd_estimator="jvp", use_lsd_scaling=False))
-    context = torch.randn(2, 5, 12)
-    actions = torch.randn(2, 4, 3)
-    state = torch.randn(2, 1, 4)
-
-    loss = model(context, actions, state)
-    assert torch.isfinite(loss)
-    assert model.last_loss_stats["lsd_jvp_enabled"] == 1.0
-    loss.backward()
-    assert any(
-        p.grad is not None and torch.isfinite(p.grad).all()
-        for p in model.parameters()
-        if p.requires_grad
-    )
 
 
 def test_rollflow_head_disables_stochastic_finite_differences():

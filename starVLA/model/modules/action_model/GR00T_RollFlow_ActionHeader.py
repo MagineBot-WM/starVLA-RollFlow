@@ -56,7 +56,6 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         w_fm: float = 1.0,
         w_lsd: float = 0.1,
         use_ot: bool = True,
-        lsd_estimator: str = "finite_difference",
         use_lsd_scaling: bool = True,
         use_lsd_gate: bool = True,
         action_loss_weights: Optional[Sequence[float]] = None,
@@ -85,7 +84,6 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         self.w_fm = w_fm
         self.w_lsd = w_lsd
         self.use_ot = use_ot
-        self.lsd_estimator = lsd_estimator
         self.use_lsd_scaling = use_lsd_scaling
         self.use_lsd_gate = use_lsd_gate
         self.action_loss_weights = action_loss_weights
@@ -179,9 +177,6 @@ class RollFlowActionHead(nn.Module):
                 w_fm=float(_first_config_value(config, ("w_fm",), 1.0)),
                 w_lsd=float(_first_config_value(config, ("w_lsd",), 0.1)),
                 use_ot=bool(_first_config_value(config, ("use_ot",), True)),
-                lsd_estimator=str(
-                    _first_config_value(config, ("lsd_estimator",), "finite_difference")
-                ),
                 use_lsd_scaling=bool(
                     _first_config_value(config, ("use_lsd_scaling",), True)
                 ),

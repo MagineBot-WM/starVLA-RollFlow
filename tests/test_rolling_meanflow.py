@@ -12,7 +12,6 @@ from starVLA.model.modules.action_model.rolling_meanflow_matching_head.rolling_m
     central_difference_lsd,
     masked_mse,
     ot_match,
-    _jvp_student_predictions,
 )
 
 
@@ -85,18 +84,6 @@ class _NonFiniteTangent(nn.Module):
         return output
 
 
-class _SmoothVelocity(nn.Module):
-    """Small smooth field with an analytically well-behaved target-time JVP."""
-
-    def __init__(self):
-        super().__init__()
-        self.scale = nn.Parameter(torch.tensor(0.7))
-
-    def forward(self, z, source_time, target_time, context, **kwargs):
-        del context, kwargs
-        return self.scale * (0.2 * z + 0.3 * source_time + 0.4 * target_time.square())
-
-
 def _config(**overrides):
     values = {
         "horizon": 8,
@@ -114,71 +101,6 @@ def _config(**overrides):
     }
     values.update(overrides)
     return RollFlowConfig(**values)
-
-
-def test_jvp_tangent_matches_small_central_difference():
-    torch.manual_seed(0)
-    model = _SmoothVelocity()
-    x_s = torch.randn(2, 4, 1)
-    x_t = torch.randn_like(x_s)
-    s = torch.full((2, 4, 1), 0.2)
-    t = torch.full((2, 4, 1), 0.6)
-    active = torch.ones_like(t, dtype=torch.bool)
-    delta = 1e-3
-
-    v_tangent, _ = _jvp_student_predictions(
-        model,
-        x_s,
-        x_t,
-        s,
-        t,
-        active,
-        context=None,
-        kwargs={},
-    )
-
-    def endpoint(target_time):
-        velocity = model(x_s, s, target_time, None)
-        return x_s + (target_time - s) * velocity
-
-    finite = (endpoint(t + delta) - endpoint(t - delta)) / (2.0 * delta)
-    torch.testing.assert_close(v_tangent, finite, atol=2e-4, rtol=2e-4)
-    loss = v_tangent.square().mean()
-    loss.backward()
-    assert model.scale.grad is not None
-    assert torch.isfinite(model.scale.grad)
-
-
-def test_jvp_estimator_is_selected_and_logged():
-    cfg = _config(lsd_estimator="jvp", use_lsd_gate=False, use_lsd_scaling=False)
-    model = _SmoothVelocity()
-    actions = torch.randn(2, cfg.horizon, cfg.action_dim)
-    loss, stats = RollFlow(cfg).loss(model, actions)
-    assert stats["lsd_jvp_enabled"] == 1.0
-    assert torch.isfinite(loss)
-    loss.backward()
-
-
-def test_jvp_rejects_finite_difference_scaling():
-    with pytest.raises(ValueError, match="use_lsd_scaling must be False"):
-        _config(lsd_estimator="jvp", use_lsd_scaling=True)
-
-    model = _SmoothVelocity()
-    x0 = torch.randn(1, 8, 1)
-    x1 = torch.randn_like(x0)
-    s = torch.full_like(x0, 0.2)
-    t = torch.full_like(x0, 0.5)
-    with pytest.raises(ValueError, match="use_lsd_scaling must be False"):
-        central_difference_lsd(
-            model,
-            x0,
-            x1,
-            s,
-            t,
-            delta=0.01,
-            lsd_estimator="jvp",
-            use_lsd_scaling=True,
-        )
 
 
 def test_training_times_are_valid_for_every_divisor_k():

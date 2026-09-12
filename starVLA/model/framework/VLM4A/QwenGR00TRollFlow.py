@@ -112,7 +112,6 @@ class QwenGR00TRollFlowDefaultConfig:
             "w_fm": 1.0,
             "w_lsd": 0.1,
             "use_ot": True,
-            "lsd_estimator": "finite_difference",
             "use_lsd_gate": True,
             "clip_velocity": 0.0,
             "iterative_cold_start": True,

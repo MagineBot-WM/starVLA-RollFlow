@@ -33,7 +33,6 @@ framework:
     w_lsd: 0.25
     use_ot: true
     # Current proposed objective: scaled LSD plus detached FM-budget mask.
-    lsd_estimator: finite_difference
     use_lsd_scaling: true
     use_lsd_gate: true
     clip_velocity: 0.0

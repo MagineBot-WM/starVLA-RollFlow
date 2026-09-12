@@ -69,17 +69,14 @@ sample gives s=ratio*t.  An FM-only curriculum starts with s=t and anneals to
 the configured mixture probability.  Deployment still uses the exact rolling
 staircase needed for cache alignment.
 
-The default LSD estimator is the packed central difference above.  An optional
-JVP estimator computes the same tangent of ``X_{s,t}`` exactly with forward-mode
-automatic differentiation for controlled estimator ablations.  There is no CSF,
-Split loss, persistent training cache, or adjacent-window training sampler.
+The LSD estimator is the packed central difference above.  There is no CSF,
+split loss, persistent training cache, or adjacent-window training sampler.
 Rolling state exists only at inference.
 """
 
 from __future__ import annotations
 
 import math
-from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
@@ -107,9 +104,6 @@ class RollFlowConfig:
     w_fm: float = 1.0
     w_lsd: float = 0.1
     use_ot: bool = True
-    # Keep the production default on the packed finite-difference path.  The
-    # JVP path is exposed for controlled estimator comparisons only.
-    lsd_estimator: str = "finite_difference"
     # Remove the explicit central-difference gradient amplification.  Keep
     # this configurable so the unscaled historical objective can be measured
     # as a controlled ablation.
@@ -134,13 +128,6 @@ class RollFlowConfig:
             raise ValueError("finite_difference_delta must be in (0, 0.5)")
         if self.w_fm < 0 or self.w_lsd < 0:
             raise ValueError("loss weights must be non-negative")
-        if self.lsd_estimator not in {"finite_difference", "jvp"}:
-            raise ValueError("lsd_estimator must be 'finite_difference' or 'jvp'")
-        if self.lsd_estimator == "jvp" and self.use_lsd_scaling:
-            raise ValueError(
-                "use_lsd_scaling must be False when lsd_estimator='jvp'; "
-                "the 2*delta scaling is specific to central differences"
-            )
         if self.clip_velocity < 0:
             raise ValueError("clip_velocity must be non-negative")
         if self.action_loss_weights is not None:
@@ -241,7 +228,6 @@ def central_difference_lsd(
     pad: Optional[Tensor] = None,
     w_fm: float = 1.0,
     w_lsd: float = 0.1,
-    lsd_estimator: str = "finite_difference",
     use_lsd_scaling: bool = True,
     use_lsd_gate: bool = True,
     teacher_clip: float = 0.0,
@@ -262,21 +248,12 @@ def central_difference_lsd(
     active-FM budget ``w_lsd * loss_fm_active``.  Both quantities are already
     reduced by ``masked_mse``; the gate is therefore one aggregate decision per
     local rank, not a per-sample decision.  With the gate disabled, finite LSD
-    values are added directly; non-finite values are safely dropped.  The
-    The ``jvp`` estimator computes the tangent of the same flow endpoint directly
-    and therefore must not use the finite-difference ``2*delta`` scaling.
+    values are added directly; non-finite values are safely dropped.
     """
     kwargs = {} if model_kwargs is None else model_kwargs
     delta = float(delta)
     if w_fm < 0 or w_lsd < 0:
         raise ValueError("w_fm and w_lsd must be non-negative")
-    if lsd_estimator not in {"finite_difference", "jvp"}:
-        raise ValueError("lsd_estimator must be 'finite_difference' or 'jvp'")
-    if lsd_estimator == "jvp" and use_lsd_scaling:
-        raise ValueError(
-            "use_lsd_scaling must be False when lsd_estimator='jvp'; "
-            "the 2*delta scaling is specific to central differences"
-        )
     if not 0 <= teacher_clip < float("inf"):
         raise ValueError("teacher_clip must be finite and non-negative")
     active = _lsd_mask(s, t, delta) if active is None else active.bool()
@@ -314,24 +291,16 @@ def central_difference_lsd(
     # -------------------------------------------------------------------------
     # 2. Gradient-bearing tangent + local FM prediction
     # -------------------------------------------------------------------------
-    if lsd_estimator == "finite_difference":
-        # Leave inactive target times unperturbed to avoid t-delta < s or
-        # t+delta > 1.  One packed 3B student forward covers all branches.
-        t_minus = torch.where(loss_active, t - delta, t)
-        t_plus = torch.where(loss_active, t + delta, t)
-        V_minus, V_plus, v_local = _parallel_student_predictions(
-            model, x_s, x_t, s, t, t_minus, t_plus, context, kwargs
-        )
-        X_minus = flow_map(x_s, s, t_minus, V_minus)
-        X_plus = flow_map(x_s, s, t_plus, V_plus)
-        v_tangent = (X_plus - X_minus) / (2.0 * delta)
-    else:
-        # The JVP direction reproduces the packed finite-difference perturbation:
-        # all valid (non-padded) target-time tokens move together while source
-        # time and x_s stay fixed.
-        v_tangent, v_local = _jvp_student_predictions(
-            model, x_s, x_t, s, t, loss_active, context, kwargs
-        )
+    # Leave inactive target times unperturbed to avoid t-delta < s or
+    # t+delta > 1.  One packed 3B student forward covers all branches.
+    t_minus = torch.where(loss_active, t - delta, t)
+    t_plus = torch.where(loss_active, t + delta, t)
+    V_minus, V_plus, v_local = _parallel_student_predictions(
+        model, x_s, x_t, s, t, t_minus, t_plus, context, kwargs
+    )
+    X_minus = flow_map(x_s, s, t_minus, V_minus)
+    X_plus = flow_map(x_s, s, t_plus, V_plus)
+    v_tangent = (X_plus - X_minus) / (2.0 * delta)
 
     fm_error = v_local - v_gt
     loss_fm = masked_mse(
@@ -379,9 +348,6 @@ def central_difference_lsd(
         "lsd_loss": loss_lsd.detach(),
         "lsd_loss_raw": loss_lsd_raw.detach(),
         "lsd_loss_metric": loss_lsd_metric.detach(),
-        "lsd_jvp_enabled": loss_lsd_raw.new_tensor(
-            float(lsd_estimator == "jvp")
-        ).detach(),
         "lsd_scaling_enabled": loss_lsd_raw.new_tensor(float(use_lsd_scaling)).detach(),
         "lsd_gate_active": (~lsd_keep).to(loss_lsd_raw.dtype).detach(),
         "lsd_gate_enabled": loss_lsd_raw.new_tensor(float(use_lsd_gate)).detach(),
@@ -594,75 +560,6 @@ def _predict(
     return out
 
 
-def _jvp_student_predictions(
-    model,
-    x_s,
-    x_t,
-    s,
-    t,
-    loss_active,
-    context,
-    kwargs,
-):
-    """Compute the endpoint tangent with differentiable forward-mode AD.
-
-    ``central_difference_lsd`` perturbs only target times for valid tokens,
-    keeping ``x_s`` and source times fixed.  Differentiating
-    ``X_{s,t}=x_s+(t-s)u(x_s,s,t)`` in that same direction gives an estimator
-    with the identical mathematical target but without the explicit
-    ``1/(2*delta)`` finite-difference factor.
-    """
-    # ``torch.func.jvp`` is the modern transform, but its bf16 + math-SDPA
-    # backward path currently fails in this model with a SafeSoftmax dtype
-    # mismatch.  ``autograd.functional.jvp(create_graph=True)`` uses the same
-    # forward-mode derivative while retaining a graph that can be differentiated
-    # by the outer loss, which is required because LSD is a training objective.
-    from torch.autograd.functional import jvp
-    # PyTorch's fused SDPA kernels do not currently implement forward-mode AD
-    # (and some do not implement the required second derivative either).  The
-    # math kernel is the reference-compatible fallback for the JVP branch;
-    # ordinary finite-difference/teacher forwards keep their configured path.
-    from torch.nn.attention import SDPBackend, sdpa_kernel
-
-    direction = loss_active.to(dtype=t.dtype)
-    # The framework intentionally disables its outer autocast around the
-    # action head.  Re-enable it locally for low-precision checkpoints so the
-    # float32 RollFlow state/time tensors are cast before entering bf16/fp16
-    # linear projections.  Without this, the JVP path fails at the first DiT
-    # feed-forward layer with a mat1/mat2 dtype mismatch.
-    model_module = getattr(model, "__self__", None)
-    parameter_dtype = (
-        next(model_module.parameters()).dtype
-        if isinstance(model_module, nn.Module)
-        else x_s.dtype
-    )
-    use_autocast = (
-        x_s.device.type in {"cuda", "cpu"}
-        and parameter_dtype in {torch.float16, torch.bfloat16}
-    )
-    autocast_context = (
-        torch.autocast(x_s.device.type, dtype=parameter_dtype)
-        if use_autocast
-        else nullcontext()
-    )
-
-    def endpoint(target_time):
-        velocity = _predict(model, x_s, s, target_time, context, kwargs)
-        return flow_map(x_s, s, target_time, velocity)
-
-    with autocast_context:
-        with sdpa_kernel(SDPBackend.MATH):
-            _, v_tangent = jvp(
-                endpoint,
-                (t,),
-                (direction,),
-                create_graph=True,
-                strict=False,
-            )
-        v_local = _predict(model, x_t, s, t, context, kwargs)
-    return v_tangent, v_local
-
-
 def _parallel_student_predictions(
     model,
     x_s,
@@ -829,7 +726,6 @@ class RollFlow:
             pad=pad,
             w_fm=cfg.w_fm,
             w_lsd=cfg.w_lsd,
-            lsd_estimator=cfg.lsd_estimator,
             use_lsd_scaling=cfg.use_lsd_scaling,
             use_lsd_gate=cfg.use_lsd_gate,
             teacher_clip=cfg.teacher_clip,
@@ -852,7 +748,6 @@ class RollFlow:
             "lsd_loss": float(stats["lsd_loss"].cpu()),
             "lsd_loss_raw": float(stats["lsd_loss_raw"].cpu()),
             "lsd_loss_metric": float(stats["lsd_loss_metric"].cpu()),
-            "lsd_jvp_enabled": float(stats["lsd_jvp_enabled"].cpu()),
             "lsd_scaling_enabled": float(stats["lsd_scaling_enabled"].cpu()),
             "lsd_gate_active": float(stats["lsd_gate_active"].cpu()),
             "lsd_gate_enabled": float(stats["lsd_gate_enabled"].cpu()),

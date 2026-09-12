@@ -89,16 +89,6 @@ case "$EXPERIMENT" in
     SESSION="rollflow_ablation_ot_gate_no_scaling_55k"
     PORT=29757
     ;;
-  jvp_ot_gate_no_scaling)
-    CONFIG_PATH="$CONFIG_DIR/finetune_libero10hz_apple_corrected_55k_jvp_ot_gate_no_scaling.yaml"
-    SESSION="rollflow_jvp_ot_gate_no_scaling_55k"
-    PORT=29758
-    ;;
-  jvp_ot_no_gate_no_scaling)
-    CONFIG_PATH="$CONFIG_DIR/finetune_libero10hz_apple_corrected_55k_jvp_ot_no_gate_no_scaling.yaml"
-    SESSION="rollflow_jvp_ot_no_gate_no_scaling_55k"
-    PORT=29759
-    ;;
   from_scratch_g1)
     CONFIG_PATH="$CONFIG_DIR/finetune_agibot_g1_apple_corrected_from_scratch.yaml"
     SESSION="rollflow_agibot_g1_apple_from_scratch"
@@ -110,7 +100,7 @@ case "$EXPERIMENT" in
     PORT=29748
     ;;
   *)
-    echo "EXPERIMENT must be standard, armweighted, raw_standard, raw_armweighted, corrected_adapters, mixed_55k, mixed_55k_lsd_gate, mixed_55k_lsd_target_gate, ablation_no_ot_no_gate, ablation_ot_no_gate, ablation_ot_gate, ablation_ot_no_scaling_no_gate, ablation_no_ot_no_gate_no_scaling, ablation_ot_no_gate_no_scaling, ablation_ot_gate_no_scaling, jvp_ot_gate_no_scaling, jvp_ot_no_gate_no_scaling, from_scratch_g1, or from_scratch_mixed" >&2
+    echo "EXPERIMENT must be standard, armweighted, raw_standard, raw_armweighted, corrected_adapters, mixed_55k, mixed_55k_lsd_gate, mixed_55k_lsd_target_gate, ablation_no_ot_no_gate, ablation_ot_no_gate, ablation_ot_gate, ablation_ot_no_scaling_no_gate, ablation_no_ot_no_gate_no_scaling, ablation_ot_no_gate_no_scaling, ablation_ot_gate_no_scaling, from_scratch_g1, or from_scratch_mixed" >&2
     exit 2
     ;;
 esac
@@ -147,7 +137,7 @@ tmux new-session -d -s "$SESSION" bash -lc "
   source /data/miniconda3/etc/profile.d/conda.sh
   conda activate starVLA
   cd '$ROOT_DIR'
-  if [[ '$EXPERIMENT' == corrected_adapters || '$EXPERIMENT' == mixed_55k || '$EXPERIMENT' == mixed_55k_lsd_gate || '$EXPERIMENT' == mixed_55k_lsd_target_gate || '$EXPERIMENT' == ablation_no_ot_no_gate || '$EXPERIMENT' == ablation_ot_no_gate || '$EXPERIMENT' == ablation_ot_gate || '$EXPERIMENT' == ablation_ot_no_scaling_no_gate || '$EXPERIMENT' == ablation_no_ot_no_gate_no_scaling || '$EXPERIMENT' == ablation_ot_no_gate_no_scaling || '$EXPERIMENT' == ablation_ot_gate_no_scaling || '$EXPERIMENT' == jvp_ot_gate_no_scaling || '$EXPERIMENT' == jvp_ot_no_gate_no_scaling || '$EXPERIMENT' == from_scratch_g1 || '$EXPERIMENT' == from_scratch_mixed ]]; then
+  if [[ '$EXPERIMENT' == corrected_adapters || '$EXPERIMENT' == mixed_55k || '$EXPERIMENT' == mixed_55k_lsd_gate || '$EXPERIMENT' == mixed_55k_lsd_target_gate || '$EXPERIMENT' == ablation_no_ot_no_gate || '$EXPERIMENT' == ablation_ot_no_gate || '$EXPERIMENT' == ablation_ot_gate || '$EXPERIMENT' == ablation_ot_no_scaling_no_gate || '$EXPERIMENT' == ablation_no_ot_no_gate_no_scaling || '$EXPERIMENT' == ablation_ot_no_gate_no_scaling || '$EXPERIMENT' == ablation_ot_gate_no_scaling || '$EXPERIMENT' == from_scratch_g1 || '$EXPERIMENT' == from_scratch_mixed ]]; then
     '$PYTHON_BIN' examples/realRobots/AgiBotG1/dataset_tools/audit_apple_mapping.py \
       --source '$DATA_ROOT/pick_up_the_apple' \
       --overlay '$DATA_ROOT/agibot-g1-apple-corrected'

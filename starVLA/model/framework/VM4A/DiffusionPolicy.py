@@ -72,11 +72,6 @@ class DiffusionPolicyDefaultConfig:
     n_groups: int = 8
     cond_predict_scale: bool = True
     num_train_timesteps: int = 100
-    # The task-05 action transform is mean/std, so valid normalized actions can
-    # be outside [-1, 1]. Keep this configurable instead of silently clipping them.
-    clip_sample: bool = True
-    action_loss_weights: tuple[float, ...] | None = None
-    action_loss_mask: tuple[float, ...] | None = None
 
 
 def _get_image_size(config) -> tuple[int, int]:
@@ -127,7 +122,7 @@ class DiffusionPolicy(baseframework):
         noise_scheduler = DDPMScheduler(
             num_train_timesteps=int(framework_config.num_train_timesteps),
             beta_schedule="squaredcos_cap_v2",
-            clip_sample=bool(framework_config.clip_sample),
+            clip_sample=True,
             prediction_type="epsilon",
         )
         self.action_model = DiffusionUnetImagePolicy(
@@ -457,15 +452,6 @@ class DiffusionPolicy(baseframework):
             # the window length equals the horizon.
             actions.append(action_tensor[:horizon])
         batch["action"] = torch.stack(actions, dim=0)
-        configured_weights = framework_config.get("action_loss_mask", None)
-        if configured_weights is None:
-            configured_weights = framework_config.get("action_loss_weights", None)
-        if configured_weights is not None:
-            if len(configured_weights) != action_dim:
-                raise ValueError(f"DP action_loss_weights must have {action_dim} values, got {len(configured_weights)}")
-            batch["action_loss_weights"] = torch.as_tensor(
-                configured_weights, dtype=model_dtype, device=device
-            )
 
         return batch
 

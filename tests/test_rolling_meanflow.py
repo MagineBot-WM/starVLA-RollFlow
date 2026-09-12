@@ -68,6 +68,21 @@ class _HighTangentResidual(nn.Module):
         return self.value * (1.0 + 100.0 * gap)
 
 
+class _SamplewiseTangentResidual(nn.Module):
+    """Makes one sample over-budget while another remains admissible."""
+
+    def __init__(self):
+        super().__init__()
+        self.value = nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, z, source_time, target_time, context, **kwargs):
+        del kwargs
+        marker = context[:, :1, :1]
+        slope = torch.where(marker > 0.5, 100.0, 0.1).to(z)
+        gap = target_time - source_time
+        return self.value * (1.0 + slope * gap)
+
+
 class _NonFiniteTangent(nn.Module):
     """Emits NaNs only on the packed tangent rows."""
 
@@ -303,6 +318,39 @@ def test_lsd_gate_can_be_disabled_without_changing_fm_supervision():
     assert stats["lsd_keep_frac"] == 1.0
     assert stats["lsd_loss"] == stats["lsd_loss_raw"]
     assert loss > stats["fm_loss"]
+
+
+def test_lsd_gate_is_truly_samplewise_and_preserves_accepted_sample_gradient():
+    model = _SamplewiseTangentResidual()
+    x0 = torch.zeros(2, 2, 1)
+    x1 = torch.tensor([[[1.0], [1.0]], [[1.1], [1.1]]])
+    s = torch.full_like(x0, 0.2)
+    t = torch.full_like(x0, 0.6)
+    context = torch.tensor([[[1.0]], [[0.0]]])
+
+    loss, stats = central_difference_lsd(
+        model,
+        x0,
+        x1,
+        s,
+        t,
+        delta=0.01,
+        context=context,
+        w_fm=1.0,
+        w_lsd=1.0,
+    )
+
+    assert stats["lsd_keep_per_sample"].tolist() == [False, True]
+    assert stats["lsd_gate_active"] == pytest.approx(0.5)
+    assert stats["lsd_keep_frac"] == pytest.approx(0.5)
+    assert stats["lsd_loss_raw_per_sample"][0] > stats["lsd_budget_per_sample"][0]
+    assert stats["lsd_loss_raw_per_sample"][1] <= stats["lsd_budget_per_sample"][1]
+    assert stats["lsd_loss"] > 0
+    assert stats["lsd_loss"] < stats["lsd_loss_raw"]
+
+    loss.backward()
+    assert model.value.grad is not None
+    assert torch.isfinite(model.value.grad)
 
 
 def test_nonfinite_lsd_is_dropped_without_poisoning_fm():

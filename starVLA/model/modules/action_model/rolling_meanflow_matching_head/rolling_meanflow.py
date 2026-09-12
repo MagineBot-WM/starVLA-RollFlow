@@ -24,14 +24,15 @@ Core training algorithm
     X_plus  = x_s + (t+delta-s) * u_plus
     v_tangent = (X_plus - X_minus) / (2.0*delta)
 
-    # 4. Compute the loss terms and apply the optional LSD gate.
+    # 4. Compute per-sample losses and apply the optional LSD gate.
     loss_fm         = MSE(v_instant, v_gt)
     loss_fm_active  = MSE(v_instant, v_gt, active rows)
     loss_lsd_metric = MSE(v_tangent, stopgrad(v_teacher), active rows)
     loss_lsd_raw    = 2*delta * loss_lsd_metric  # optional legacy-safe scaling
-    lsd_budget = w_lsd * stopgrad(loss_fm_active)
-    mask = isfinite(loss_lsd_raw) ∧ (loss_lsd_raw ≤ lsd_budget)  # use_lsd_gate=True
-    loss = loss_fm + where(mask, loss_lsd_raw, 0)
+    lsd_budget[b] = w_lsd * stopgrad(loss_fm_active[b])
+    mask[b] = isfinite(loss_lsd_raw[b]) ∧ (loss_lsd_raw[b] ≤ lsd_budget[b])
+    # Accepted sample losses are active-token weighted before the batch mean.
+    loss = loss_fm + weighted_mean_b(where(mask[b], loss_lsd_raw[b], 0))
 
 With ``use_lsd_gate=False``, the finite LSD term is added directly and the
 detached FM budget is not used; ``loss_fm_active`` remains a diagnostic only.
@@ -69,7 +70,13 @@ sample gives s=ratio*t.  An FM-only curriculum starts with s=t and anneals to
 the configured mixture probability.  Deployment still uses the exact rolling
 staircase needed for cache alignment.
 
-The LSD estimator is the packed central difference above.  There is no CSF,
+The LSD estimator is the packed central difference above.  The optional gate is
+sample-wise: each sample first aggregates its own active tokens, then compares
+its finite LSD value against its own detached FM budget.  Samples with no
+active tokens, non-finite LSD, or an over-budget LSD contribute no LSD
+gradient; accepted samples are combined using their active-token counts so
+that the all-accepted case has exactly the same scale as the global MSE.
+There is no CSF,
 split loss, persistent training cache, or adjacent-window training sampler.
 Rolling state exists only at inference.
 """
@@ -235,12 +242,13 @@ def central_difference_lsd(
     Teacher-only branches run without autograd; this changes memory use, not the
     predicted values or objective.  The LSD
     metric is scaled by ``2*delta`` (when ``use_lsd_scaling`` is true) to remove
-    the explicit central-difference gradient amplification, then hard-masked when
-    ``use_lsd_gate`` is true and it is non-finite or exceeds the detached
-    active-FM budget ``w_lsd * loss_fm_active``.  Both quantities are already
-    reduced by ``masked_mse``; the gate is therefore one aggregate decision per
-    local rank, not a per-sample decision.  With the gate disabled, finite LSD
-    values are added directly; non-finite values are safely dropped.
+    the explicit central-difference gradient amplification.  For each sample,
+    the active rows are reduced to one LSD value and one detached FM budget;
+    ``use_lsd_gate`` then makes an independent finite/budget decision for that
+    sample.  Accepted samples are combined with active-token weighting, so the
+    all-accepted case has the same scale as the original global MSE.  Samples
+    with no active rows are excluded from LSD.  With the gate disabled, finite
+    sample losses are added directly and non-finite samples are safely dropped.
     """
     kwargs = {} if model_kwargs is None else model_kwargs
     delta = float(delta)
@@ -288,43 +296,81 @@ def central_difference_lsd(
     v_tangent = (X_plus - X_minus) / (2.0 * delta)
 
     fm_error = v_local - v_gt
-    loss_fm = masked_mse(
+    _, fm_sums, fm_counts = _masked_mse_components(
         fm_error,
         pad=pad,
         action_loss_weights=action_loss_weights,
     )
-    loss_fm_active = masked_mse(
+    loss_fm = fm_sums.sum() / fm_counts.sum().clamp_min(1.0)
+    fm_active_per_sample, fm_active_sums, active_counts = _masked_mse_components(
         fm_error,
         pad=pad,
         valid=loss_active,
         action_loss_weights=action_loss_weights,
     )
-    loss_lsd_metric = masked_mse(
+    loss_fm_active = fm_active_sums.sum() / active_counts.sum().clamp_min(1.0)
+    lsd_metric_per_sample, lsd_sums, _ = _masked_mse_components(
         v_tangent - v_teacher.detach(),
         pad=pad,
         valid=loss_active,
         action_loss_weights=action_loss_weights,
     )
-    loss_lsd_raw = (
-        (2.0 * delta) * loss_lsd_metric
-        if use_lsd_scaling
-        else loss_lsd_metric
-    )
+    loss_lsd_metric = lsd_sums.sum() / active_counts.sum().clamp_min(1.0)
+    lsd_scale = 2.0 * delta if use_lsd_scaling else 1.0
+    loss_lsd_raw_per_sample = lsd_scale * lsd_metric_per_sample
+    loss_lsd_raw = lsd_scale * loss_lsd_metric
     # ``w_lsd`` is the legacy config name for this budget ratio.  Keep the
     # semantic name local so the comparison is explicit and self-documenting.
     lsd_budget_ratio = float(w_lsd)
-    lsd_budget = lsd_budget_ratio * loss_fm_active.detach()
-    lsd_finite = torch.isfinite(loss_lsd_raw)
-    lsd_keep = (
-        lsd_finite & (loss_lsd_raw <= lsd_budget)
+    lsd_budget_per_sample = lsd_budget_ratio * fm_active_per_sample.detach()
+    has_active_sample = active_counts > 0
+    lsd_finite_per_sample = (
+        torch.isfinite(loss_lsd_raw_per_sample) & has_active_sample
+    )
+    lsd_keep_per_sample = (
+        lsd_finite_per_sample
+        & (loss_lsd_raw_per_sample <= lsd_budget_per_sample)
         if use_lsd_gate
-        else lsd_finite
+        else lsd_finite_per_sample
     )
     # ``where`` is essential here: NaN/Inf multiplied by a zero mask remains
     # NaN/Inf.  The false branch is a graph-connected zero and contributes no
-    # loss or gradient for non-finite or over-budget LSD values.
-    safe_lsd_raw = torch.nan_to_num(loss_lsd_raw, nan=0.0, posinf=0.0, neginf=0.0)
-    loss_lsd = torch.where(lsd_keep, safe_lsd_raw, torch.zeros_like(safe_lsd_raw))
+    # loss or gradient for non-finite or over-budget LSD values.  Weighting by
+    # active token count preserves the global masked-MSE scale when every
+    # sample is accepted, while allowing each sample to be rejected alone.
+    safe_lsd_raw_per_sample = torch.nan_to_num(
+        loss_lsd_raw_per_sample,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    accepted_sums = torch.where(
+        lsd_keep_per_sample,
+        safe_lsd_raw_per_sample * active_counts,
+        torch.zeros_like(safe_lsd_raw_per_sample),
+    )
+    loss_lsd = accepted_sums.sum() / active_counts.sum().clamp_min(1.0)
+    active_sample_count = has_active_sample.to(loss_lsd_raw.dtype).sum()
+    active_token_count = active_counts.sum()
+    lsd_finite_frac = (
+        lsd_finite_per_sample.to(loss_lsd_raw.dtype).sum()
+        / active_sample_count.clamp_min(1.0)
+    )
+    lsd_keep_frac = (
+        lsd_keep_per_sample.to(loss_lsd_raw.dtype).sum()
+        / active_sample_count.clamp_min(1.0)
+    )
+    lsd_gate_active = (
+        (has_active_sample & ~lsd_keep_per_sample)
+        .to(loss_lsd_raw.dtype)
+        .sum()
+        / active_sample_count.clamp_min(1.0)
+    )
+    lsd_keep_token_frac = (
+        torch.where(lsd_keep_per_sample, active_counts, torch.zeros_like(active_counts)).sum()
+        / active_token_count.clamp_min(1.0)
+    )
+    lsd_budget = lsd_budget_ratio * loss_fm_active.detach()
     loss = w_fm * loss_fm + loss_lsd
 
     return loss, {
@@ -334,12 +380,25 @@ def central_difference_lsd(
         "lsd_loss_raw": loss_lsd_raw.detach(),
         "lsd_loss_metric": loss_lsd_metric.detach(),
         "lsd_scaling_enabled": loss_lsd_raw.new_tensor(float(use_lsd_scaling)).detach(),
-        "lsd_gate_active": (~lsd_keep).to(loss_lsd_raw.dtype).detach(),
+        "lsd_gate_active": lsd_gate_active.detach(),
         "lsd_gate_enabled": loss_lsd_raw.new_tensor(float(use_lsd_gate)).detach(),
-        "lsd_finite_frac": lsd_finite.to(loss_lsd_raw.dtype).detach(),
-        "lsd_keep_frac": lsd_keep.to(loss_lsd_raw.dtype).detach(),
+        "lsd_finite_frac": lsd_finite_frac.detach(),
+        "lsd_keep_frac": lsd_keep_frac.detach(),
         "lsd_budget": lsd_budget.detach(),
         "active_lsd_frac": loss_active.float().mean().detach(),
+        "lsd_active_sample_frac": has_active_sample.float().mean().detach(),
+        "lsd_keep_token_frac": lsd_keep_token_frac.detach(),
+        "fm_loss_active_per_sample": fm_active_per_sample.detach(),
+        "lsd_loss_raw_per_sample": loss_lsd_raw_per_sample.detach(),
+        "lsd_loss_per_sample": torch.where(
+            lsd_keep_per_sample,
+            safe_lsd_raw_per_sample,
+            torch.zeros_like(safe_lsd_raw_per_sample),
+        ).detach(),
+        "lsd_budget_per_sample": lsd_budget_per_sample.detach(),
+        "lsd_active_per_sample": has_active_sample.detach(),
+        "lsd_finite_per_sample": lsd_finite_per_sample.detach(),
+        "lsd_keep_per_sample": lsd_keep_per_sample.detach(),
         "v_local_abs": v_local.detach().abs().mean(),
         "v_tangent_abs": masked_mean(v_tangent.detach().abs(), loss_active),
         "v_teacher_abs": masked_mean(v_teacher.abs(), loss_active),
@@ -587,27 +646,52 @@ def masked_mse(
     valid: Optional[Tensor] = None,
     action_loss_weights: Optional[Tensor] = None,
 ) -> Tensor:
+    _, sums, counts = _masked_mse_components(
+        error,
+        pad=pad,
+        valid=valid,
+        action_loss_weights=action_loss_weights,
+    )
+    return sums.sum() / counts.sum().clamp_min(1.0)
+
+
+def _masked_mse_components(
+    error: Tensor,
+    *,
+    pad: Optional[Tensor] = None,
+    valid: Optional[Tensor] = None,
+    action_loss_weights: Optional[Tensor] = None,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Return per-sample MSE, masked sums, and masked token counts.
+
+    The public ``masked_mse`` reduces the same components globally.  Keeping
+    the sums/counts lets the RollFlow gate make a decision per sample without
+    changing the scale of the original token-weighted batch objective.
+    """
     squared_error = error.float().pow(2)
     if action_loss_weights is None:
-        loss = squared_error.mean(dim=-1)
+        token_loss = squared_error.mean(dim=-1)
     else:
         weights = action_loss_weights.to(device=error.device, dtype=squared_error.dtype)
         if weights.ndim != 1 or weights.shape[0] != error.shape[-1]:
             raise ValueError(
                 "action_loss_weights must have shape [action_dim] matching error"
             )
-        loss = (squared_error * weights).sum(dim=-1) / weights.sum().clamp_min(1e-12)
-    mask = torch.ones_like(loss, dtype=torch.bool)
+        token_loss = (squared_error * weights).sum(dim=-1) / weights.sum().clamp_min(1e-12)
+    mask = torch.ones_like(token_loss, dtype=torch.bool)
     if pad is not None:
         mask &= ~pad.bool()
     if valid is not None:
         v = valid.squeeze(-1) if valid.ndim == 3 else valid
         mask &= v.bool()
-    if not bool(mask.any()):
-        # Summing an empty differentiable view returns a graph-connected zero,
-        # allowing distributed/all-padding batches to participate in backward.
-        return loss[mask].sum()
-    return loss[mask].mean()
+    # ``where`` prevents NaNs in inactive/padded tokens from contaminating the
+    # per-sample sums, while retaining NaNs in selected active tokens so the
+    # sample-wise finite check can reject that sample.
+    masked_token_loss = torch.where(mask, token_loss, torch.zeros_like(token_loss))
+    sums = masked_token_loss.sum(dim=1)
+    counts = mask.sum(dim=1).to(dtype=sums.dtype)
+    per_sample = sums / counts.clamp_min(1.0)
+    return per_sample, sums, counts
 
 
 def masked_mean(value: Tensor, valid: Tensor) -> Tensor:
@@ -736,6 +820,13 @@ class RollFlow:
             "lsd_gate_enabled": float(stats["lsd_gate_enabled"].cpu()),
             "lsd_finite_frac": float(stats["lsd_finite_frac"].cpu()),
             "lsd_keep_frac": float(stats["lsd_keep_frac"].cpu()),
+            # Sample-wise gate summaries.  Keep these scalar so framework
+            # logging remains compatible with trackers expecting one number.
+            "lsd_active_sample_frac": float(stats["lsd_active_sample_frac"].cpu()),
+            "lsd_finite_sample_frac": float(stats["lsd_finite_frac"].cpu()),
+            "lsd_keep_sample_frac": float(stats["lsd_keep_frac"].cpu()),
+            "lsd_reject_sample_frac": float(stats["lsd_gate_active"].cpu()),
+            "lsd_keep_token_frac": float(stats["lsd_keep_token_frac"].cpu()),
             "lsd_budget": float(stats["lsd_budget"].cpu()),
             "active_lsd_frac": float(stats["active_lsd_frac"].cpu()),
             "num_time_groups": times.num_time_groups,

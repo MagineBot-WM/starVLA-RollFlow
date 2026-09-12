@@ -24,7 +24,6 @@ framework:
       agibot-g1:
         action_dim: 22
         state_dim: 22
-    teacher_clip: 2.0
     action_horizon: 32
     execution_horizon: 8
     repeated_diffusion_steps: 4

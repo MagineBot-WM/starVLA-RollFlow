@@ -185,9 +185,6 @@ class RollFlowActionHead(nn.Module):
                     config, ("action_loss_weights",), None
                 ),
                 clip_velocity=float(_first_config_value(config, ("clip_velocity",), 0.0)),
-                # Teacher-target clipping is disabled in the current objective;
-                # retain the lookup so old serialized configs remain readable.
-                teacher_clip=float(_first_config_value(config, ("teacher_clip",), 0.0)),
                 iterative_cold_start=bool(
                     _first_config_value(config, ("iterative_cold_start",), False)
                 ),

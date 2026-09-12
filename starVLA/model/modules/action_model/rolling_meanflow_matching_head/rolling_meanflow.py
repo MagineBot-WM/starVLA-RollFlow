@@ -113,9 +113,6 @@ class RollFlowConfig:
     action_loss_weights: Optional[Sequence[float]] = None
 
     clip_velocity: float = 0.0
-    # Retained for backwards-compatible configs, but disabled in the current
-    # objective; teacher-target clipping is not used as a stabilizer.
-    teacher_clip: float = 0.0
     iterative_cold_start: bool = False
     reset_cache_each_step: bool = False
 
@@ -143,8 +140,6 @@ class RollFlowConfig:
                 raise ValueError("action_loss_weights must contain a positive value")
             # Keep the overall loss scale unchanged when reweighting groups.
             self.action_loss_weights = tuple(weight / mean for weight in weights)
-        if not 0 <= self.teacher_clip < float("inf"):
-            raise ValueError("teacher_clip must be finite and non-negative (0 disables clipping)")
         if not 0.0 <= self.p_k1 <= 1.0:
             raise ValueError("p_k1 must lie in [0, 1]")
         if not 0.0 <= self.p_fm <= 1.0:
@@ -230,7 +225,6 @@ def central_difference_lsd(
     w_lsd: float = 0.1,
     use_lsd_scaling: bool = True,
     use_lsd_gate: bool = True,
-    teacher_clip: float = 0.0,
     action_loss_weights: Optional[Tensor] = None,
     model_kwargs: Optional[dict[str, Any]] = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
@@ -239,9 +233,7 @@ def central_difference_lsd(
     ``active`` marks tokens that carry a finite off-diagonal interval.  Diagonal
     staircase tokens still receive FM supervision but are excluded from LSD.
     Teacher-only branches run without autograd; this changes memory use, not the
-    predicted values or objective. Optional teacher clipping is retained only
-    for backwards compatibility (zero disables it); the production objective
-    leaves it off.  The LSD
+    predicted values or objective.  The LSD
     metric is scaled by ``2*delta`` (when ``use_lsd_scaling`` is true) to remove
     the explicit central-difference gradient amplification, then hard-masked when
     ``use_lsd_gate`` is true and it is non-finite or exceeds the detached
@@ -254,8 +246,6 @@ def central_difference_lsd(
     delta = float(delta)
     if w_fm < 0 or w_lsd < 0:
         raise ValueError("w_fm and w_lsd must be non-negative")
-    if not 0 <= teacher_clip < float("inf"):
-        raise ValueError("teacher_clip must be finite and non-negative")
     active = _lsd_mask(s, t, delta) if active is None else active.bool()
     _validate_training_inputs(x0, x1, s, t, active, pad)
     _validate_times(s, t, delta, active)
@@ -278,15 +268,10 @@ def central_difference_lsd(
         V_st = _predict(model, x_s, s, t, context, kwargs)
         X_t_hat = flow_map(x_s, s, t, V_st)
         v_teacher = _predict(model, X_t_hat, t, t, context, kwargs)
-        # Clipping bounds finite targets; it cannot repair a nonfinite teacher.
         if not bool(torch.isfinite(v_teacher).all()):
             raise FloatingPointError("Nonfinite RollFlow teacher prediction")
         if not bool(torch.isfinite(v_gt).all()):
             raise FloatingPointError("Nonfinite RollFlow ground truth")
-        teacher_clip_frac = v_teacher.new_zeros(())
-        if teacher_clip > 0:
-            teacher_clip_frac = masked_mean((v_teacher.abs() > teacher_clip).float(), loss_active)
-            v_teacher = v_teacher.clamp(-teacher_clip, teacher_clip)
 
     # -------------------------------------------------------------------------
     # 2. Gradient-bearing tangent + local FM prediction
@@ -358,7 +343,6 @@ def central_difference_lsd(
         "v_local_abs": v_local.detach().abs().mean(),
         "v_tangent_abs": masked_mean(v_tangent.detach().abs(), loss_active),
         "v_teacher_abs": masked_mean(v_teacher.abs(), loss_active),
-        "teacher_clip_frac": teacher_clip_frac,
     }
 
 
@@ -728,7 +712,6 @@ class RollFlow:
             w_lsd=cfg.w_lsd,
             use_lsd_scaling=cfg.use_lsd_scaling,
             use_lsd_gate=cfg.use_lsd_gate,
-            teacher_clip=cfg.teacher_clip,
             action_loss_weights=(
                 None
                 if cfg.action_loss_weights is None
@@ -754,7 +737,6 @@ class RollFlow:
             "lsd_finite_frac": float(stats["lsd_finite_frac"].cpu()),
             "lsd_keep_frac": float(stats["lsd_keep_frac"].cpu()),
             "lsd_budget": float(stats["lsd_budget"].cpu()),
-            "teacher_clip_frac": float(stats["teacher_clip_frac"].cpu()),
             "active_lsd_frac": float(stats["active_lsd_frac"].cpu()),
             "num_time_groups": times.num_time_groups,
             "train_block_size": times.block_size,

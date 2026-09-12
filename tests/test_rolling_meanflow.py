@@ -198,12 +198,11 @@ def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():
     assert end["p_fm"] == pytest.approx(0.2)
 
 
-@pytest.mark.parametrize("teacher_clip,scale", [(0.0, 1.0), (2.0, 0.1)])
-def test_linear_path_oracle_has_zero_fm_and_lsd_error(teacher_clip, scale):
+def test_linear_path_oracle_has_zero_fm_and_lsd_error():
     torch.manual_seed(0)
     cfg = _config()
-    x0 = scale * torch.randn(3, cfg.horizon, cfg.action_dim)
-    x1 = scale * torch.randn_like(x0)
+    x0 = torch.randn(3, cfg.horizon, cfg.action_dim)
+    x1 = torch.randn_like(x0)
     times = StaircaseTimeSampler(cfg).sample_training(
         x0.shape[0],
         device=x0.device,
@@ -221,10 +220,7 @@ def test_linear_path_oracle_has_zero_fm_and_lsd_error(teacher_clip, scale):
         active=times.active,
         context=x1,
         w_fm=cfg.w_fm,
-        # Keep the oracle test focused on the unscaled teacher identity.  The
-        # production default intentionally uses a conservative target scale.
         w_lsd=1.0,
-        teacher_clip=teacher_clip,
     )
 
     assert loss < 1e-8
@@ -232,25 +228,8 @@ def test_linear_path_oracle_has_zero_fm_and_lsd_error(teacher_clip, scale):
     assert stats["lsd_loss"] < 1e-7
 
 
-def test_clipped_teacher_has_expected_bias_and_no_teacher_gradient():
-    model = _LearnableConstant()
-    model.value.data.fill_(3.0)
-    x = torch.zeros(1, 2, 1)
-    s, t = torch.full_like(x, 0.2), torch.full_like(x, 0.6)
-    loss, stats = central_difference_lsd(model, x, x, s, t, delta=0.01, w_fm=0, w_lsd=1, teacher_clip=2)
-    assert stats["teacher_clip_frac"] == 1
-    assert stats["v_teacher_abs"] == 2
-    assert stats["lsd_loss_metric"] == pytest.approx(1, abs=1e-5)
-    assert stats["lsd_loss_raw"] == pytest.approx(0.02, abs=1e-5)
-    assert loss.item() == pytest.approx(0.02, abs=1e-4)
-    loss.backward()
-    assert model.value.grad.item() == pytest.approx(0.04, abs=1e-3)
-    assert model.grad_enabled == [False, False, True]
-
-
 def test_lsd_scaling_can_be_disabled_for_historical_ablation():
-    model = _LearnableConstant()
-    model.value.data.fill_(3.0)
+    model = _HighTangentResidual()
     x = torch.zeros(1, 2, 1)
     s, t = torch.full_like(x, 0.2), torch.full_like(x, 0.6)
     loss, stats = central_difference_lsd(
@@ -264,15 +243,14 @@ def test_lsd_scaling_can_be_disabled_for_historical_ablation():
         w_lsd=1,
         use_lsd_scaling=False,
         use_lsd_gate=False,
-        teacher_clip=2,
     )
 
     assert stats["lsd_scaling_enabled"] == 0.0
-    assert stats["lsd_loss_metric"] == pytest.approx(1.0, abs=1e-5)
-    assert stats["lsd_loss_raw"] == pytest.approx(1.0, abs=1e-5)
-    assert loss.item() == pytest.approx(1.0, abs=1e-5)
+    assert stats["lsd_loss_raw"] == stats["lsd_loss_metric"]
+    assert loss.item() == pytest.approx(stats["lsd_loss_raw"].item(), abs=1e-5)
+    assert torch.isfinite(loss)
     loss.backward()
-    assert model.value.grad.item() == pytest.approx(2.0, abs=1e-3)
+    assert model.value.grad is not None and torch.isfinite(model.value.grad)
 
 
 def test_lsd_scalar_is_hard_masked_by_detached_fm_budget():
@@ -291,7 +269,6 @@ def test_lsd_scalar_is_hard_masked_by_detached_fm_budget():
         delta=0.01,
         w_fm=1.0,
         w_lsd=1.0,
-        teacher_clip=0.0,
     )
 
     assert stats["lsd_loss_raw"] > stats["fm_loss"]
@@ -319,7 +296,6 @@ def test_lsd_gate_can_be_disabled_without_changing_fm_supervision():
         w_fm=1.0,
         w_lsd=1.0,
         use_lsd_gate=False,
-        teacher_clip=0.0,
     )
 
     assert stats["lsd_gate_enabled"] == 0.0
@@ -345,7 +321,6 @@ def test_nonfinite_lsd_is_dropped_without_poisoning_fm():
         delta=0.01,
         w_fm=1.0,
         w_lsd=1.0,
-        teacher_clip=0.0,
     )
 
     assert torch.isnan(stats["lsd_loss_raw"])

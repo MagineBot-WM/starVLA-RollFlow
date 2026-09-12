@@ -25,7 +25,6 @@ framework:
         state_dim: 22
         # Raw weights are normalized internally to mean one.
         action_loss_weights: [1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    teacher_clip: 2.0
     action_horizon: 32
     execution_horizon: 8
     repeated_diffusion_steps: 4

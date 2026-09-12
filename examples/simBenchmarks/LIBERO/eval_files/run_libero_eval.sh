@@ -42,6 +42,18 @@ UNNORM_KEY="${UNNORM_KEY:-franka}"
 # still render camera observations because they are policy inputs.
 SAVE_VIDEO="${SAVE_VIDEO:-1}"
 ATTACH="${ATTACH:-1}"
+# Optional server config overrides, passed as separate KEY=VALUE arguments:
+# bash run_libero_eval.sh start framework.action_model.execution_horizon=4 framework.action_model.inference_steps=8
+# For comparisons, also set distinct SESSION, BASE_PORT and RESULTS_ROOT.
+SERVER_OVERRIDES=()
+for override in "${@:2}"; do
+  [[ "${override}" == *=* ]] || { echo "Expected KEY=VALUE: ${override}" >&2; exit 2; }
+  SERVER_OVERRIDES+=(--config_override "${override}")
+done
+SERVER_EXTRA_ARGS=""
+if (( ${#SERVER_OVERRIDES[@]} )); then
+  printf -v SERVER_EXTRA_ARGS ' %q' "${SERVER_OVERRIDES[@]}"
+fi
 
 SUITES=(libero_spatial libero_object libero_goal libero_10)
 LABELS=(spatial object goal long)
@@ -167,10 +179,10 @@ for i in "${!SUITES[@]}"; do
   mkdir -p "${output_dir}"
 
   printf -v server_run \
-    'cd %q && DEBUG= NO_ALBUMENTATIONS_UPDATE=1 PYTHONPATH=%q CUDA_VISIBLE_DEVICES=%q %q %q --ckpt_path %q --port %q --use_bf16 2>&1 | tee %q' \
+    'cd %q && DEBUG= NO_ALBUMENTATIONS_UPDATE=1 PYTHONPATH=%q CUDA_VISIBLE_DEVICES=%q %q %q --ckpt_path %q --port %q --use_bf16%s 2>&1 | tee %q' \
     "${STARVLA_DIR}" "${STARVLA_DIR}" "${gpu}" "${STARVLA_PYTHON}" \
     "${STARVLA_DIR}/deployment/model_server/server_policy.py" "${CKPT}" "${port}" \
-    "${SERVER_LOG_DIR}/${suite}.log"
+    "${SERVER_EXTRA_ARGS}" "${SERVER_LOG_DIR}/${suite}.log"
   printf -v eval_run \
     'cd %q && DEBUG= LIBERO_CONFIG_PATH=%q PYTHONPATH=%q MUJOCO_GL=egl PYOPENGL_PLATFORM=egl TOKENIZERS_PARALLELISM=false TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 CUDA_VISIBLE_DEVICES=%q %q %q --args.pretrained-path %q --args.host 127.0.0.1 --args.port %q --args.task-suite-name %q --args.num-trials-per-task %q --args.max-tasks %q --args.num-steps-wait %q --args.seed %q --args.video-out-path %q --args.unnorm-key %q %q 2>&1 | tee %q' \
     "${STARVLA_DIR}" "${LIBERO_CONFIG_PATH}" "${LIBERO_HOME}:${STARVLA_DIR}" "${gpu}" \

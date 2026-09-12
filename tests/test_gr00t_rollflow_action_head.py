@@ -60,6 +60,33 @@ def _config(**overrides):
     return SimpleNamespace(framework=SimpleNamespace(action_model=SimpleNamespace(**values)))
 
 
+@pytest.mark.parametrize("decoder", ["meanflow", "euler"])
+def test_formal_head_rejects_experimental_decoder_configs(decoder):
+    with pytest.raises(ValueError, match="rolling inference only"):
+        RollFlowActionHead(_config(inference_decoder=decoder, meanflow_steps=5))
+
+
+def test_native_adapters_share_trunk_and_isolate_cache():
+    cfg = _config(embodiments={"agibot-g1": {"state_dim": 22, "action_dim": 22}})
+    head = RollFlowActionHead(cfg)
+    context = torch.randn(2, 5, 12)
+    loss = head(context, torch.randn(2, 4, 3), torch.randn(2, 1, 4), embodiment="franka")
+    loss = loss + head(context, torch.randn(2, 4, 22), torch.randn(2, 1, 22), embodiment="agibot-g1")
+    loss.backward()
+    for module in (head.model, head.action_encoder, head.adapters["agibot-g1"]):
+        assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in module.parameters())
+        assert all(torch.isfinite(p.grad).all() for p in module.parameters() if p.grad is not None)
+    restored = RollFlowActionHead(cfg)
+    restored.load_state_dict(head.state_dict(), strict=True)
+    assert not any("adapters.agibot-g1.model." in k for k in head.state_dict())
+    assert head.predict_action(context, torch.randn(2, 1, 4), embodiment="franka").shape == (2, 2, 3)
+    old_cache = head.rollflow._cache.clone()
+    assert head.predict_action(context, torch.randn(2, 1, 22), embodiment="agibot-g1").shape == (2, 2, 22)
+    torch.testing.assert_close(head.rollflow._cache, old_cache)
+    head.reset()
+    assert all(flow.cache_info is None for flow in head.rollflows.values())
+
+
 def test_action_encoder_accepts_tokenwise_source_time():
     torch.manual_seed(0)
     encoder = ActionEncoder(action_dim=3, hidden_size=16)
@@ -163,6 +190,24 @@ def test_rollflow_head_loss_backward_and_rolling_inference():
     assert "model.interval_timestep_encoder.timestep_embedder.linear_1.weight" in model.state_dict()
 
 
+def test_rollflow_head_jvp_estimator_backward():
+    torch.manual_seed(0)
+    model = RollFlowActionHead(_config(lsd_estimator="jvp", use_lsd_scaling=False))
+    context = torch.randn(2, 5, 12)
+    actions = torch.randn(2, 4, 3)
+    state = torch.randn(2, 1, 4)
+
+    loss = model(context, actions, state)
+    assert torch.isfinite(loss)
+    assert model.last_loss_stats["lsd_jvp_enabled"] == 1.0
+    loss.backward()
+    assert any(
+        p.grad is not None and torch.isfinite(p.grad).all()
+        for p in model.parameters()
+        if p.requires_grad
+    )
+
+
 def test_rollflow_head_disables_stochastic_finite_differences():
     diffusion_cfg = _config().framework.action_model.diffusion_model_cfg.copy()
     diffusion_cfg["dropout"] = 0.1
@@ -179,6 +224,7 @@ def test_config_defaults_and_legacy_gr00t_checkpoint_loading():
     assert defaults.to_dict()["p_k1"] == 0.7
     assert defaults.to_dict()["p_fm"] == 0.3
     assert defaults.to_dict()["fm_curriculum_steps"] == 5000
+    assert defaults.to_dict()["w_lsd"] == 0.1
 
     diffusion_cfg = _config().framework.action_model.diffusion_model_cfg.copy()
     diffusion_cfg.update(num_attention_heads=12, attention_head_dim=64, num_layers=1)

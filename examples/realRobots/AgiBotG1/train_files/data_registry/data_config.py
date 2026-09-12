@@ -82,7 +82,47 @@ class AgiBotG1DataConfig:
         )
 
 
-ROBOT_TYPE_CONFIG_MAP = {"agibot_g1": AgiBotG1DataConfig()}
+class AgiBotG1BinaryDataConfig(AgiBotG1DataConfig):
+    """Native real-G1 convention; separate statistics from continuous opening."""
+
+    embodiment_tag = EmbodimentTag.AGIBOT_G1_BINARY
+    state_keys: ClassVar[list[str]] = AgiBotG1DataConfig.state_keys + ["state.base_velocity"]
+    state_key_dims: ClassVar[dict[str, int]] = {**AgiBotG1DataConfig.state_key_dims, "state.base_velocity": 2}
+
+    def transform(self):
+        keys = self.state_keys + self.action_keys
+        modes = {key: "q99" for key in keys}
+        modes["action.grippers"] = "binary"  # 0=open, 1=closed, unchanged
+        return ComposedModalityTransform(transforms=[
+            StateActionToTensor(apply_to=keys),
+            StateActionTransform(apply_to=keys, normalization_modes=modes),
+        ])
+
+
+class AgiBotG1AppleDataConfig(AgiBotG1BinaryDataConfig):
+    """Apple export: native G1 layout with continuous gripper commands.
+
+    The export uses the same 22-D canonical fields as the binary G1 adapter,
+    but its right gripper contains many intermediate positions.  Keep the
+    binary tag for model routing while using q99 for both gripper channels.
+    """
+
+    embodiment_tag = EmbodimentTag.AGIBOT_G1_BINARY
+
+    def transform(self):
+        keys = self.state_keys + self.action_keys
+        modes = {key: "q99" for key in keys}
+        return ComposedModalityTransform(transforms=[
+            StateActionToTensor(apply_to=keys),
+            StateActionTransform(apply_to=keys, normalization_modes=modes),
+        ])
+
+
+ROBOT_TYPE_CONFIG_MAP = {
+    "agibot_g1": AgiBotG1DataConfig(),
+    "agibot-g1": AgiBotG1BinaryDataConfig(),
+    "agibot-g1-apple": AgiBotG1AppleDataConfig(),
+}
 ROBOT_TYPE_TO_EMBODIMENT_TAG = {}
 
 
@@ -116,6 +156,20 @@ def _entries(names, weight):
 
 
 DATASET_NAMED_MIXTURES = {
+    "agibot-g1": [
+        (name, 1.0, "agibot-g1") for name in (
+            "task_01_pick_the_orange",
+            "task_02_pick_the_orange",
+            "task_03_persimmon_orange_yellow_pepper_transfer",
+            "task_03_pick_the_persimmon",
+            "task_04_pick_the_persimmon",
+            "task_04_pick_the_red_pepper_to_pink_plate",
+            "task_05_pick_the_orange_to_pink_plate",
+            "task_05_pick_the_yellow_pepper_to_pink_plate",
+            "task_06_pick_the_mango_to_pink_plate",
+            "task_07_pick_the_orange_to_pink_plate",
+        )
+    ],
     "agibot_g1_public": _entries(_PUBLIC_TASKS, 1.0),
     "agibot_g1_real": _entries(_REAL_TASKS, 1.0),
     # The three local object variants form one logical pick/place task. Their
@@ -123,3 +177,68 @@ DATASET_NAMED_MIXTURES = {
     # Keep balance_dataset_weights=false in the YAML.
     "agibot_g1_all": _entries(_PUBLIC_TASKS, 1.0) + _entries(_REAL_TASKS, 1.0 / len(_REAL_TASKS)),
 }
+
+# 50% LIBERO / 50% real G1; equal tasks within each family. Root is Datasets/.
+DATASET_NAMED_MIXTURES["libero_agibot_g1"] = [
+    (f"libero/{name}", 0.125, "libero_franka_rollflow") for name in (
+        "libero_object_no_noops_1.0.0_lerobot",
+        "libero_goal_no_noops_1.0.0_lerobot",
+        "libero_spatial_no_noops_1.0.0_lerobot",
+        "libero_10_no_noops_1.0.0_lerobot",
+    )
+] + [(f"agibot-g1/{name}", 0.05, tag) for name, _, tag in DATASET_NAMED_MIXTURES["agibot-g1"]]
+
+# Clean second-stage experiment: only the Apple G1 export is mixed with LIBERO.
+# LIBERO contributes 30% (0.075 per suite) and Apple contributes 70%.
+# The Apple overlay is derived from pick_up_the_apple without modifying its source.
+DATASET_NAMED_MIXTURES["libero_pick_up_the_apple"] = [
+    (f"libero/{name}", 0.075, "libero_franka_rollflow") for name in (
+        "libero_object_no_noops_1.0.0_lerobot",
+        "libero_goal_no_noops_1.0.0_lerobot",
+        "libero_spatial_no_noops_1.0.0_lerobot",
+        "libero_10_no_noops_1.0.0_lerobot",
+    )
+] + [("agibot-g1-apple", 0.7, "agibot-g1-apple")]
+
+# The controlled-rate counterpart uses the independent 10 Hz LIBERO overlay.
+# The original 20 Hz LIBERO datasets remain available under the mixture above.
+DATASET_NAMED_MIXTURES["libero10hz_pick_up_the_apple"] = [
+    (f"libero_10hz/{name}", 0.075, "libero_franka_rollflow") for name in (
+        "libero_object_no_noops_1.0.0_lerobot",
+        "libero_goal_no_noops_1.0.0_lerobot",
+        "libero_spatial_no_noops_1.0.0_lerobot",
+        "libero_10_no_noops_1.0.0_lerobot",
+    )
+] + [("agibot-g1-apple", 0.7, "agibot-g1-apple")]
+
+# Corrected Apple overlay.  Keep the old mixture name/path intact so previous
+# checkpoints remain reproducible; new runs should use this explicit variant.
+DATASET_NAMED_MIXTURES["libero10hz_pick_up_the_apple_corrected"] = [
+    (f"libero_10hz/{name}", 0.075, "libero_franka_rollflow") for name in (
+        "libero_object_no_noops_1.0.0_lerobot",
+        "libero_goal_no_noops_1.0.0_lerobot",
+        "libero_spatial_no_noops_1.0.0_lerobot",
+        "libero_10_no_noops_1.0.0_lerobot",
+    )
+] + [("agibot-g1-apple-corrected", 0.7, "agibot-g1-apple")]
+
+# Benchmark-rate joint counterpart for the adapter-first experiment.  Keep
+# LIBERO at its native 20 Hz (the simulator also runs at 20 Hz), use the
+# corrected Apple overlay, and give each embodiment family equal probability.
+# This is intentionally a new name so existing 10 Hz experiments remain
+# exactly reproducible.
+DATASET_NAMED_MIXTURES["libero20hz_pick_up_the_apple_corrected_balanced"] = [
+    (f"libero/{name}", 0.125, "libero_franka_rollflow") for name in (
+        "libero_object_no_noops_1.0.0_lerobot",
+        "libero_goal_no_noops_1.0.0_lerobot",
+        "libero_spatial_no_noops_1.0.0_lerobot",
+        "libero_10_no_noops_1.0.0_lerobot",
+    )
+] + [("agibot-g1-apple-corrected", 0.5, "agibot-g1-apple")]
+
+# G1-only counterpart for clean from-scratch pretraining.  Keep this as a
+# named mixture so the launcher and config cannot accidentally fall back to the
+# legacy, uncorrected Apple overlay.
+DATASET_NAMED_MIXTURES["agibot_g1_apple_corrected"] = [
+    ("agibot-g1-apple-corrected", 1.0, "agibot-g1-apple")
+]

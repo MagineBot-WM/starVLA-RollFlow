@@ -190,6 +190,13 @@ class PolicyServerWrapper:
                 )
         proc = self._get_processor(effective_key)
 
+        # Multi-embodiment heads must select the same robot as normalization.
+        if getattr(getattr(self._framework, "action_model", None), "adapters", None):
+            items = examples if isinstance(examples, list) else [examples]
+            if any(e.get("robot_tag", effective_key) != effective_key for e in items):
+                raise ValueError("robot_tag must match unnorm_key")
+            examples = [{**e, "robot_tag": effective_key} for e in items]
+
         out = self._framework.predict_action(examples=examples, **kwargs)
         normalized = np.asarray(out["normalized_actions"])  # (B, T, D)
 

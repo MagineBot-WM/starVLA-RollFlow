@@ -110,8 +110,10 @@ class QwenGR00TRollFlowDefaultConfig:
             "fm_curriculum_steps": 5000,
             "inference_steps": 4,
             "w_fm": 1.0,
-            "w_lsd": 0.25,
+            "w_lsd": 0.1,
             "use_ot": True,
+            "lsd_estimator": "finite_difference",
+            "use_lsd_gate": True,
             "clip_velocity": 0.0,
             "iterative_cold_start": True,
             "reset_cache_each_step": False,
@@ -186,9 +188,6 @@ class Qwen_GR00T_RollFlow(baseframework):
         """ """
         batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
-        actions = [example["action"] for example in examples]  # label [B, len, 7]
-
-        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
@@ -203,53 +202,47 @@ class Qwen_GR00T_RollFlow(baseframework):
             # last_hidden_state: [B, seq_len, H]
             last_hidden = qwenvl_outputs.hidden_states[-1]  # [B, L, H]
 
-        # Step 4: Action Expert Forward and Loss
+        # Native action widths differ, but all views share one VLM forward.
+        groups = {}
+        for i, example in enumerate(examples):
+            tag = example.get("robot_tag", self.action_model.default_embodiment)
+            # Single-embodiment legacy heads do not route by dataset tag.
+            if not self.action_model.adapters:
+                tag = self.action_model.default_embodiment
+            groups.setdefault(tag, []).append(i)
+        metrics = {}
+        action_loss = last_hidden.new_zeros((), dtype=torch.float32)
         with torch.autocast("cuda", enabled=False):
-            actions = torch.tensor(
-                np.array(actions), device=last_hidden.device, dtype=torch.float32
-            )  # [B, T_full, action_dim]
-            actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
-
-            repeated_diffusion_steps = (
-                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
-                if self.config and hasattr(self.config, "framework")
-                else 4
-            )
-            actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
-            last_hidden_repeated = last_hidden.repeat(repeated_diffusion_steps, 1, 1)
-            if backbone_attention_mask is not None:
-                backbone_attention_mask = backbone_attention_mask.repeat(repeated_diffusion_steps, 1).to(
-                    dtype=torch.bool
+            for tag, indices in groups.items():
+                rows = torch.tensor(indices, device=last_hidden.device)
+                group = [examples[i] for i in indices]
+                loss = self._native_loss(
+                    group, last_hidden[rows],
+                    None if backbone_attention_mask is None else backbone_attention_mask[rows],
+                    tag, int(kwargs.get("training_step", 0)),
                 )
+                fraction = len(group) / len(examples)
+                action_loss = action_loss + fraction * loss
+                for key, value in (self.action_model.last_loss_stats or {}).items():
+                    metrics[f"rollflow/{tag}/{key}"] = value
+        return {"action_loss": action_loss, **metrics}
 
-            state_repeated = None
-            if state is not None:
-                state = torch.tensor(np.array(state), device=last_hidden.device, dtype=torch.float32)
-                state_repeated = state.repeat(repeated_diffusion_steps, 1, 1)
-
-            action_padding_mask = None
-            if "action_padding_mask" in examples[0]:
-                if not all("action_padding_mask" in example for example in examples):
-                    raise ValueError("action_padding_mask must be present for every example or none")
-                action_padding_mask = torch.as_tensor(
-                    np.array([example["action_padding_mask"] for example in examples]),
-                    device=last_hidden.device,
-                    dtype=torch.bool,
-                )[:, -self.action_horizon :]
-                action_padding_mask = action_padding_mask.repeat(repeated_diffusion_steps, 1)
-
-            action_loss = self.action_model(
-                last_hidden_repeated, actions_target_repeated, state_repeated,
-                encoder_attention_mask=backbone_attention_mask,
-                action_padding_mask=action_padding_mask,
-                training_step=int(kwargs.get("training_step", 0)),
-            )  # (B, chunk_len, action_dim)
-
-        stats = self.action_model.last_loss_stats or {}
-        return {
-            "action_loss": action_loss,
-            **{f"rollflow/{key}": value for key, value in stats.items()},
-        }
+    def _native_loss(self, examples, hidden, attention_mask, tag, step):
+        repeats = int(self.config.framework.action_model.get("repeated_diffusion_steps", 4))
+        def tensor(key):
+            return torch.as_tensor(np.stack([e[key] for e in examples]),
+                                   device=hidden.device, dtype=torch.float32)
+        actions = tensor("action")[:, -self.action_horizon:].repeat(repeats, 1, 1)
+        encoder = self.action_model._native_module("state_encoder", tag)
+        state = tensor("state").repeat(repeats, 1, 1) if encoder is not None else None
+        pad = None
+        if any("action_padding_mask" in e for e in examples):
+            pad = tensor("action_padding_mask")[:, -self.action_horizon:].bool().repeat(repeats, 1)
+        return self.action_model(
+            hidden.repeat(repeats, 1, 1), actions, state,
+            encoder_attention_mask=None if attention_mask is None else attention_mask.bool().repeat(repeats, 1),
+            action_padding_mask=pad, training_step=step, embodiment=tag,
+        )
 
     @torch.inference_mode()
     def predict_action(
@@ -268,10 +261,17 @@ class Qwen_GR00T_RollFlow(baseframework):
         """
         if type(examples) is not list:
             examples = [examples]
+        tag = kwargs.get("embodiment") or examples[0].get("robot_tag", self.action_model.default_embodiment)
+        if not self.action_model.adapters:
+            tag = self.action_model.default_embodiment
+        if any(e.get("robot_tag", tag) != tag for e in examples):
+            raise ValueError("Each inference request must use a single embodiment")
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
 
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+        if self.action_model._native_module("state_encoder", tag) is None:
+            state = None
 
         train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
@@ -306,6 +306,7 @@ class Qwen_GR00T_RollFlow(baseframework):
                 state,
                 encoder_attention_mask=backbone_attention_mask,
                 refinement_steps=kwargs.get("refinement_steps"),
+                embodiment=tag,
             )  # (B, chunk_len, action_dim)
 
         # NumPy has no bfloat16 dtype. DeepSpeed/bf16 evaluation can propagate

@@ -16,24 +16,47 @@ from typing import Any, Callable, ClassVar, Dict, MutableMapping, Tuple, Union
 # Overwatch Default Format String
 RICH_FORMATTER, DATEFMT = "| >> %(message)s", "%m/%d [%H:%M:%S]"
 
-# Set Logging Configuration
-LOG_CONFIG = {
-    "version": 1,
-    "disable_existing_loggers": True,
-    "formatters": {"simple-console": {"format": RICH_FORMATTER, "datefmt": DATEFMT}},
-    "handlers": {
-        "console": {
-            "class": "rich.logging.RichHandler",
-            "formatter": "simple-console",
-            "markup": True,
-            "rich_tracebacks": True,
-            "show_level": True,
-            "show_path": True,
-            "show_time": True,
-        }
-    },
-    "root": {"level": "INFO", "handlers": ["console"]},
-}
+# Set Logging Configuration.  Rich is useful interactively, but its ANSI
+# styles and OSC-8 source links make redirected/tmux logs hard to read.  The
+# launcher can request a plain stream with ``STARVLA_PLAIN_LOGS=1`` while the
+# default remains the existing Rich output for interactive runs.
+if os.environ.get("STARVLA_PLAIN_LOGS") == "1":
+    LOG_CONFIG = {
+        "version": 1,
+        "disable_existing_loggers": True,
+        "formatters": {
+            "simple-console": {
+                "format": "%(asctime)s | %(levelname)s | %(message)s",
+                "datefmt": DATEFMT,
+            }
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "simple-console",
+                "stream": "ext://sys.stderr",
+            }
+        },
+        "root": {"level": "INFO", "handlers": ["console"]},
+    }
+else:
+    LOG_CONFIG = {
+        "version": 1,
+        "disable_existing_loggers": True,
+        "formatters": {"simple-console": {"format": RICH_FORMATTER, "datefmt": DATEFMT}},
+        "handlers": {
+            "console": {
+                "class": "rich.logging.RichHandler",
+                "formatter": "simple-console",
+                "markup": True,
+                "rich_tracebacks": True,
+                "show_level": True,
+                "show_path": True,
+                "show_time": True,
+            }
+        },
+        "root": {"level": "INFO", "handlers": ["console"]},
+    }
 logging.config.dictConfig(LOG_CONFIG)
 
 

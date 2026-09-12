@@ -3,7 +3,16 @@ from typing import List
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL import Image
+
+# G1 right-arm experiment note:
+# The runnable training tree is /data/tzq/starVLA-RollFlow, whose ACT.py is
+# intentionally kept byte-identical to this workspace copy.  This workspace
+# snapshot contains the experiment-specific ACT implementation but not the
+# complete training package (for example, starVLA/training/train_starvla.py),
+# so launches use the full tree.  Mirror any future ACT changes to that tree
+# before restarting a run, then verify the two files have matching hashes.
 
 # LeRobot is an optional dependency used only by the ACT framework. Guard the import so
 # `build_framework()`'s auto-discovery pass (which imports every framework module) still
@@ -27,7 +36,7 @@ from starVLA.model.framework.share_tools import merge_framework_config
 @dataclass
 class ACTDefaultConfig:
     name: str = "ACT"
-    chunk_size: int = 50
+    chunk_size: int = 16
     action_dim: int = 8  # 8D joints: 7 delta joints + 1 gripper abs
     state_dim: int = 8
     n_obs_steps: int = 1
@@ -35,6 +44,8 @@ class ACTDefaultConfig:
     # Align with train_realman_pi.yaml obs_image_size / QwenPI; deployment must resize to this too.
     image_size: tuple[int, int] = (224, 224)
     pretrained_backbone_weights: str | None = "ResNet18_Weights.IMAGENET1K_V1"
+    action_loss_weights: tuple[float, ...] | None = None
+    action_loss_mask: tuple[float, ...] | None = None
 
 
 def _image_feature_name(image_key: str) -> str:
@@ -192,7 +203,21 @@ class ACT(baseframework):
                 raise ValueError(
                     f"ACT action horizon must be at least {chunk_size}, got {action_tensor.shape[0]}"
                 )
-            actions.append(action_tensor[-chunk_size:])
+            # By default preserve the legacy tail-window behavior. New
+            # aligned runs can set action_start_index=0 so observation t is
+            # supervised against actions t..t+chunk_size-1.
+            action_start = self.config.framework.get("action_start_index", None)
+            if action_start is None:
+                actions.append(action_tensor[-chunk_size:])
+            else:
+                action_start = int(action_start)
+                action_end = action_start + chunk_size
+                if action_start < 0 or action_end > action_tensor.shape[0]:
+                    raise ValueError(
+                        f"ACT action_start_index={action_start} with chunk_size={chunk_size} "
+                        f"does not fit action window of length {action_tensor.shape[0]}"
+                    )
+                actions.append(action_tensor[action_start:action_end])
         batch[ACTION] = torch.stack(actions, dim=0)
         batch["action_is_pad"] = torch.zeros(
             len(examples), chunk_size, dtype=torch.bool, device=device
@@ -202,8 +227,36 @@ class ACT(baseframework):
 
     def forward(self, examples: List[dict], **kwargs) -> dict:
         batch = self._examples_to_act_batch(examples)
-        output = self.action_model.forward(batch)
-        loss = output[0] if isinstance(output, (tuple, list)) else output
+        # Use ACTPolicy internals to get predictions, then compute weighted loss
+        # (bypasses ACTPolicy.forward's unweighted L1 loss)
+        batch_norm = self.action_model.normalize_inputs(dict(batch))
+        if self.action_model.config.image_features:
+            from lerobot.constants import OBS_IMAGES as _OBS
+            batch_norm[_OBS] = [batch_norm[k] for k in self.action_model.config.image_features]
+        batch_norm = self.action_model.normalize_targets(batch_norm)
+        actions_hat, (mu, log_sig2) = self.action_model.model(batch_norm)
+
+        configured_weights = self.config.framework.get("action_loss_mask", None)
+        if configured_weights is None:
+            configured_weights = self.config.framework.get("action_loss_weights", None)
+        if configured_weights is None:
+            w = torch.ones(actions_hat.shape[-1], device=actions_hat.device, dtype=actions_hat.dtype)
+        else:
+            if len(configured_weights) != actions_hat.shape[-1]:
+                raise ValueError(
+                    f"ACT action_loss_weights must have {actions_hat.shape[-1]} values, "
+                    f"got {len(configured_weights)}"
+                )
+            w = torch.as_tensor(configured_weights, device=actions_hat.device, dtype=actions_hat.dtype)
+
+        pad_mask = ~batch_norm["action_is_pad"].unsqueeze(-1)  # (B, T, 1)
+        l1_raw = F.l1_loss(batch_norm["action"], actions_hat, reduction="none")  # (B, T, D)
+        l1_loss = (l1_raw * pad_mask * w).sum() / (pad_mask * w).sum().clamp(min=1)
+
+        loss = l1_loss
+        if self.action_model.config.use_vae:
+            kld = (-0.5 * (1 + log_sig2 - mu.pow(2) - log_sig2.exp())).sum(-1).mean()
+            loss = l1_loss + kld * self.action_model.config.kl_weight
         return {"action_loss": loss}
 
     @torch.inference_mode()

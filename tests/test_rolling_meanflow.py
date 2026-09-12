@@ -8,9 +8,30 @@ from starVLA.model.modules.action_model.rolling_meanflow_matching_head.rolling_m
     RollFlow,
     RollFlowConfig,
     StaircaseTimeSampler,
+    _validate_times,
     central_difference_lsd,
+    masked_mse,
     ot_match,
+    _jvp_student_predictions,
 )
+
+
+def test_action_loss_weights_are_mean_normalized_and_preserve_scale():
+    cfg = _config(action_dim=3, action_loss_weights=[2.0, 1.0, 0.0])
+    assert cfg.action_loss_weights == pytest.approx((2.0, 1.0, 0.0))
+    error = torch.ones(2, 4, 3)
+    weighted = masked_mse(
+        error,
+        action_loss_weights=torch.tensor(cfg.action_loss_weights),
+    )
+    assert weighted == pytest.approx(1.0)
+
+
+def test_action_loss_weights_validate_dimension_and_positive_sum():
+    with pytest.raises(ValueError, match="one entry per action dimension"):
+        _config(action_dim=3, action_loss_weights=[1.0, 1.0])
+    with pytest.raises(ValueError, match="positive value"):
+        _config(action_dim=3, action_loss_weights=[0.0, 0.0, 0.0])
 
 
 class _LinearPathOracle(nn.Module):
@@ -35,6 +56,47 @@ class _LearnableConstant(nn.Module):
         return self.value.expand_as(z)
 
 
+class _HighTangentResidual(nn.Module):
+    """Produces a deliberately noisy tangent target for the LSD gate test."""
+
+    def __init__(self):
+        super().__init__()
+        self.value = nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, z, source_time, target_time, context, **kwargs):
+        del z, context, kwargs
+        gap = target_time - source_time
+        return self.value * (1.0 + 100.0 * gap)
+
+
+class _NonFiniteTangent(nn.Module):
+    """Emits NaNs only on the packed tangent rows."""
+
+    def __init__(self):
+        super().__init__()
+        self.value = nn.Parameter(torch.tensor(0.0))
+
+    def forward(self, z, source_time, target_time, context, **kwargs):
+        del source_time, target_time, context, kwargs
+        output = self.value.expand_as(z)
+        if z.shape[0] == 3:  # B=1: [tangent-, tangent+, local-FM]
+            output = output.clone()
+            output[:2] = float("nan")
+        return output
+
+
+class _SmoothVelocity(nn.Module):
+    """Small smooth field with an analytically well-behaved target-time JVP."""
+
+    def __init__(self):
+        super().__init__()
+        self.scale = nn.Parameter(torch.tensor(0.7))
+
+    def forward(self, z, source_time, target_time, context, **kwargs):
+        del context, kwargs
+        return self.scale * (0.2 * z + 0.3 * source_time + 0.4 * target_time.square())
+
+
 def _config(**overrides):
     values = {
         "horizon": 8,
@@ -46,12 +108,77 @@ def _config(**overrides):
         "p_fm": 0.0,
         "fm_curriculum_steps": 0,
         "w_fm": 1.0,
-        "w_lsd": 0.25,
+        "w_lsd": 0.1,
         "use_ot": False,
         "iterative_cold_start": True,
     }
     values.update(overrides)
     return RollFlowConfig(**values)
+
+
+def test_jvp_tangent_matches_small_central_difference():
+    torch.manual_seed(0)
+    model = _SmoothVelocity()
+    x_s = torch.randn(2, 4, 1)
+    x_t = torch.randn_like(x_s)
+    s = torch.full((2, 4, 1), 0.2)
+    t = torch.full((2, 4, 1), 0.6)
+    active = torch.ones_like(t, dtype=torch.bool)
+    delta = 1e-3
+
+    v_tangent, _ = _jvp_student_predictions(
+        model,
+        x_s,
+        x_t,
+        s,
+        t,
+        active,
+        context=None,
+        kwargs={},
+    )
+
+    def endpoint(target_time):
+        velocity = model(x_s, s, target_time, None)
+        return x_s + (target_time - s) * velocity
+
+    finite = (endpoint(t + delta) - endpoint(t - delta)) / (2.0 * delta)
+    torch.testing.assert_close(v_tangent, finite, atol=2e-4, rtol=2e-4)
+    loss = v_tangent.square().mean()
+    loss.backward()
+    assert model.scale.grad is not None
+    assert torch.isfinite(model.scale.grad)
+
+
+def test_jvp_estimator_is_selected_and_logged():
+    cfg = _config(lsd_estimator="jvp", use_lsd_gate=False, use_lsd_scaling=False)
+    model = _SmoothVelocity()
+    actions = torch.randn(2, cfg.horizon, cfg.action_dim)
+    loss, stats = RollFlow(cfg).loss(model, actions)
+    assert stats["lsd_jvp_enabled"] == 1.0
+    assert torch.isfinite(loss)
+    loss.backward()
+
+
+def test_jvp_rejects_finite_difference_scaling():
+    with pytest.raises(ValueError, match="use_lsd_scaling must be False"):
+        _config(lsd_estimator="jvp", use_lsd_scaling=True)
+
+    model = _SmoothVelocity()
+    x0 = torch.randn(1, 8, 1)
+    x1 = torch.randn_like(x0)
+    s = torch.full_like(x0, 0.2)
+    t = torch.full_like(x0, 0.5)
+    with pytest.raises(ValueError, match="use_lsd_scaling must be False"):
+        central_difference_lsd(
+            model,
+            x0,
+            x1,
+            s,
+            t,
+            delta=0.01,
+            lsd_estimator="jvp",
+            use_lsd_scaling=True,
+        )
 
 
 def test_training_times_are_valid_for_every_divisor_k():
@@ -75,6 +202,27 @@ def test_training_times_are_valid_for_every_divisor_k():
         grouped_t = times.t[:, ::group_width, 0]
         assert torch.all(grouped_t[:, :-1] >= grouped_t[:, 1:])
         torch.testing.assert_close(times.s, times.ratio * times.t)
+
+
+def test_sampled_active_times_pass_validation_at_float_boundaries():
+    """The sampler and validator must use an identical LSD boundary test."""
+    cfg = _config(horizon=32, chunk_size=8, p_k1=0.7)
+    sampler = StaircaseTimeSampler(cfg)
+    generator = torch.Generator().manual_seed(123)
+
+    for _ in range(500):
+        times = sampler.sample_training(
+            32,
+            device="cpu",
+            generator=generator,
+            p_fm=0.0,
+        )
+        _validate_times(
+            times.s,
+            times.t,
+            cfg.finite_difference_delta,
+            times.active,
+        )
 
 
 def test_grouped_training_times_match_32_by_8_design():
@@ -119,7 +267,8 @@ def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():
     assert start["p_fm"] == 1.0
     assert start["fm_only_frac"] == 1.0
     assert start["active_lsd_frac"] == 0.0
-    assert model.batch_sizes == [32]
+    assert model.batch_sizes == [32, 32, 96]
+    assert start["lsd_loss"] == 0.0
 
     _, middle = rollflow.loss(model, actions, step=50)
     _, end = rollflow.loss(model, actions, step=100)
@@ -127,11 +276,12 @@ def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():
     assert end["p_fm"] == pytest.approx(0.2)
 
 
-def test_linear_path_oracle_has_zero_fm_and_lsd_error():
+@pytest.mark.parametrize("teacher_clip,scale", [(0.0, 1.0), (2.0, 0.1)])
+def test_linear_path_oracle_has_zero_fm_and_lsd_error(teacher_clip, scale):
     torch.manual_seed(0)
     cfg = _config()
-    x0 = torch.randn(3, cfg.horizon, cfg.action_dim)
-    x1 = torch.randn_like(x0)
+    x0 = scale * torch.randn(3, cfg.horizon, cfg.action_dim)
+    x1 = scale * torch.randn_like(x0)
     times = StaircaseTimeSampler(cfg).sample_training(
         x0.shape[0],
         device=x0.device,
@@ -149,12 +299,140 @@ def test_linear_path_oracle_has_zero_fm_and_lsd_error():
         active=times.active,
         context=x1,
         w_fm=cfg.w_fm,
-        w_lsd=cfg.w_lsd,
+        # Keep the oracle test focused on the unscaled teacher identity.  The
+        # production default intentionally uses a conservative target scale.
+        w_lsd=1.0,
+        teacher_clip=teacher_clip,
     )
 
     assert loss < 1e-8
     assert stats["fm_loss"] < 1e-10
     assert stats["lsd_loss"] < 1e-7
+
+
+def test_clipped_teacher_has_expected_bias_and_no_teacher_gradient():
+    model = _LearnableConstant()
+    model.value.data.fill_(3.0)
+    x = torch.zeros(1, 2, 1)
+    s, t = torch.full_like(x, 0.2), torch.full_like(x, 0.6)
+    loss, stats = central_difference_lsd(model, x, x, s, t, delta=0.01, w_fm=0, w_lsd=1, teacher_clip=2)
+    assert stats["teacher_clip_frac"] == 1
+    assert stats["v_teacher_abs"] == 2
+    assert stats["lsd_loss_metric"] == pytest.approx(1, abs=1e-5)
+    assert stats["lsd_loss_raw"] == pytest.approx(0.02, abs=1e-5)
+    assert loss.item() == pytest.approx(0.02, abs=1e-4)
+    loss.backward()
+    assert model.value.grad.item() == pytest.approx(0.04, abs=1e-3)
+    assert model.grad_enabled == [False, False, True]
+
+
+def test_lsd_scaling_can_be_disabled_for_historical_ablation():
+    model = _LearnableConstant()
+    model.value.data.fill_(3.0)
+    x = torch.zeros(1, 2, 1)
+    s, t = torch.full_like(x, 0.2), torch.full_like(x, 0.6)
+    loss, stats = central_difference_lsd(
+        model,
+        x,
+        x,
+        s,
+        t,
+        delta=0.01,
+        w_fm=0,
+        w_lsd=1,
+        use_lsd_scaling=False,
+        use_lsd_gate=False,
+        teacher_clip=2,
+    )
+
+    assert stats["lsd_scaling_enabled"] == 0.0
+    assert stats["lsd_loss_metric"] == pytest.approx(1.0, abs=1e-5)
+    assert stats["lsd_loss_raw"] == pytest.approx(1.0, abs=1e-5)
+    assert loss.item() == pytest.approx(1.0, abs=1e-5)
+    loss.backward()
+    assert model.value.grad.item() == pytest.approx(2.0, abs=1e-3)
+
+
+def test_lsd_scalar_is_hard_masked_by_detached_fm_budget():
+    model = _HighTangentResidual()
+    x0 = torch.zeros(1, 2, 1)
+    x1 = torch.zeros_like(x0)
+    s = torch.full_like(x0, 0.2)
+    t = torch.full_like(x0, 0.6)
+
+    loss, stats = central_difference_lsd(
+        model,
+        x0,
+        x1,
+        s,
+        t,
+        delta=0.01,
+        w_fm=1.0,
+        w_lsd=1.0,
+        teacher_clip=0.0,
+    )
+
+    assert stats["lsd_loss_raw"] > stats["fm_loss"]
+    assert stats["lsd_gate_active"] == 1.0
+    assert stats["lsd_loss"] == 0.0
+    loss.backward()
+    # The over-budget LSD branch is hard-masked; only FM contributes.
+    assert model.value.grad.item() == pytest.approx(2.0, abs=1e-4)
+
+
+def test_lsd_gate_can_be_disabled_without_changing_fm_supervision():
+    model = _HighTangentResidual()
+    x0 = torch.zeros(1, 2, 1)
+    x1 = torch.zeros_like(x0)
+    s = torch.full_like(x0, 0.2)
+    t = torch.full_like(x0, 0.6)
+
+    loss, stats = central_difference_lsd(
+        model,
+        x0,
+        x1,
+        s,
+        t,
+        delta=0.01,
+        w_fm=1.0,
+        w_lsd=1.0,
+        use_lsd_gate=False,
+        teacher_clip=0.0,
+    )
+
+    assert stats["lsd_gate_enabled"] == 0.0
+    assert stats["lsd_gate_active"] == 0.0
+    assert stats["lsd_keep_frac"] == 1.0
+    assert stats["lsd_loss"] == stats["lsd_loss_raw"]
+    assert loss > stats["fm_loss"]
+
+
+def test_nonfinite_lsd_is_dropped_without_poisoning_fm():
+    model = _NonFiniteTangent()
+    x0 = torch.zeros(1, 2, 1)
+    x1 = torch.zeros_like(x0)
+    s = torch.full_like(x0, 0.2)
+    t = torch.full_like(x0, 0.6)
+
+    loss, stats = central_difference_lsd(
+        model,
+        x0,
+        x1,
+        s,
+        t,
+        delta=0.01,
+        w_fm=1.0,
+        w_lsd=1.0,
+        teacher_clip=0.0,
+    )
+
+    assert torch.isnan(stats["lsd_loss_raw"])
+    assert stats["lsd_gate_active"] == 1.0
+    assert loss.item() == 0.0
+    loss.backward()
+    assert model.value.grad is not None
+    assert torch.isfinite(model.value.grad)
+    assert model.value.grad.item() == pytest.approx(0.0, abs=1e-6)
 
 
 def test_loss_retains_gradients_only_for_tangent_and_local_paths():
@@ -172,7 +450,7 @@ def test_loss_retains_gradients_only_for_tangent_and_local_paths():
     assert torch.isfinite(model.value.grad)
 
 
-def test_mixed_fm_batch_runs_lsd_only_for_active_rows():
+def test_mixed_fm_batch_runs_all_rows_with_masked_lsd():
     model = _LearnableConstant()
     x0 = torch.randn(4, 8, 1)
     x1 = torch.randn_like(x0)
@@ -190,12 +468,12 @@ def test_mixed_fm_batch_runs_lsd_only_for_active_rows():
     )
     loss.backward()
 
-    assert model.batch_sizes == [2, 2, 8]
+    assert model.batch_sizes == [4, 4, 12]
     assert model.grad_enabled == [False, False, True]
     assert stats["active_lsd_frac"] == 0.5
 
 
-def test_padded_rows_are_excluded_from_lsd_forwards():
+def test_padded_rows_run_forwards_but_are_excluded_from_lsd_loss():
     model = _LearnableConstant()
     x0 = torch.randn(4, 8, 1)
     x1 = torch.randn_like(x0)
@@ -216,7 +494,7 @@ def test_padded_rows_are_excluded_from_lsd_forwards():
     )
     loss.backward()
 
-    assert model.batch_sizes == [1, 1, 6]
+    assert model.batch_sizes == [4, 4, 12]
     assert stats["active_lsd_frac"] == 0.25
 
 
@@ -247,7 +525,7 @@ def test_all_padding_returns_graph_connected_zero():
     assert loss.item() == 0.0
     assert model.value.grad is not None
     assert model.value.grad.item() == 0.0
-    assert model.batch_sizes == [2]
+    assert model.batch_sizes == [2, 2, 6]
 
 
 def test_ot_matching_ignores_padded_target_values():

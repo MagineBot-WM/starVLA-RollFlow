@@ -118,10 +118,24 @@ class AgiBotG1AppleDataConfig(AgiBotG1BinaryDataConfig):
         ])
 
 
+class AgiBotG1AppleH64DataConfig(AgiBotG1AppleDataConfig):
+    """64-step Apple view used by the isolated H64 RollFlow experiment.
+
+    The underlying overlay is unchanged and remains read-only.  This variant
+    only widens the action sampling window; the dataset loader pads the tail
+    with the final action when an episode is shorter than the requested window.
+    Keeping a separate robot type preserves the established 32-step contract
+    for released checkpoints and existing runs.
+    """
+
+    action_indices: ClassVar[list[int]] = list(range(64))
+
+
 ROBOT_TYPE_CONFIG_MAP = {
     "agibot_g1": AgiBotG1DataConfig(),
     "agibot-g1": AgiBotG1BinaryDataConfig(),
     "agibot-g1-apple": AgiBotG1AppleDataConfig(),
+    "agibot-g1-apple-h64": AgiBotG1AppleH64DataConfig(),
 }
 ROBOT_TYPE_TO_EMBODIMENT_TAG = {}
 
@@ -242,3 +256,20 @@ DATASET_NAMED_MIXTURES["libero20hz_pick_up_the_apple_corrected_balanced"] = [
 DATASET_NAMED_MIXTURES["agibot_g1_apple_corrected"] = [
     ("agibot-g1-apple-corrected", 1.0, "agibot-g1-apple")
 ]
+
+# Isolated H64 variant: same corrected Apple overlay, wider action window.
+DATASET_NAMED_MIXTURES["agibot_g1_apple_corrected_h64"] = [
+    ("agibot-g1-apple-corrected", 1.0, "agibot-g1-apple-h64")
+]
+
+# H64 counterpart for the fresh G1 + LIBERO comparison.  Preserve the
+# corrected 10 Hz LIBERO mixture and widen only its RollFlow action window;
+# each family keeps its native embodiment route (Franka or G1).
+DATASET_NAMED_MIXTURES["agibot_g1_apple_libero_corrected_h64"] = [
+    (f"libero_10hz/{name}", 0.075, "libero_franka_rollflow_h64") for name in (
+        "libero_object_no_noops_1.0.0_lerobot",
+        "libero_goal_no_noops_1.0.0_lerobot",
+        "libero_spatial_no_noops_1.0.0_lerobot",
+        "libero_10_no_noops_1.0.0_lerobot",
+    )
+] + [("agibot-g1-apple-corrected", 0.7, "agibot-g1-apple-h64")]

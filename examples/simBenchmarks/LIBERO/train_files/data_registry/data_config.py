@@ -70,6 +70,16 @@ class LiberoRollFlowDataConfig(Libero4in1DataConfig):
     action_indices = list(range(32))
 
 
+class LiberoRollFlowH64DataConfig(LiberoRollFlowDataConfig):
+    """LIBERO contract for the widened 64-step RollFlow action window.
+
+    Keep the existing 32-step robot type unchanged so released checkpoints
+    and benchmark scripts retain their original data contract.
+    """
+
+    action_indices = list(range(64))
+
+
 class OpenPILibero4in1DataConfig(Libero4in1DataConfig):
     def transform(self):
         return ComposedModalityTransform(transforms=[
@@ -105,6 +115,7 @@ class OpenPILibero4in1DataConfig(Libero4in1DataConfig):
 ROBOT_TYPE_CONFIG_MAP = {
     "libero_franka": Libero4in1DataConfig(),
     "libero_franka_rollflow": LiberoRollFlowDataConfig(),
+    "libero_franka_rollflow_h64": LiberoRollFlowH64DataConfig(),
     "openpi_libero_franka": OpenPILibero4in1DataConfig(),
 }
 

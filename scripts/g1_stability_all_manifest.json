@@ -22,13 +22,18 @@
     },
     {
       "run": "libero10hz_pick_up_the_apple_ablation_ot_no_gate_no_scaling_55k_20k_v1",
-      "label": "OT: w/o scaling + mask (collapsed)",
+      "label": "OT: w/o scaling + mask (unstable FM rebound)",
       "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_ot_no_gate_no_scaling_55k_20k_v1/train.log"
     },
     {
       "run": "libero10hz_pick_up_the_apple_ablation_no_ot_no_gate_no_scaling_55k_20k_v1",
-      "label": "no OT: w/o scaling + mask (collapsed)",
+      "label": "no OT: w/o scaling + mask (unstable FM rebound)",
       "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_no_ot_no_gate_no_scaling_55k_20k_v1/train.log"
+    },
+    {
+      "run": "libero10hz_pick_up_the_apple_ablation_no_ot_no_gate_55k_20k_v1",
+      "label": "no OT: scaling only",
+      "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_no_ot_no_gate_55k_20k_v1/train.log"
     }
   ]
 }

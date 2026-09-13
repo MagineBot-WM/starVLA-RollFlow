@@ -25,10 +25,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_MANIFEST = Path(
-    "/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/g1_ot_paper/"
-    "g1_ot_loss_manifest.json"
-)
+DEFAULT_MANIFEST = Path(__file__).resolve().with_name("g1_stability_all_manifest.json")
 
 
 def _float(value: Any) -> float:
@@ -40,12 +37,14 @@ def _float(value: Any) -> float:
 
 
 def _moving_average(values: list[float], window: int) -> list[float]:
-    """Causal average that preserves gaps/non-finite values."""
+    """Causal average; non-finite observations remain visible as gaps."""
     output: list[float] = []
     history: list[float] = []
     for value in values:
-        if math.isfinite(value):
-            history.append(value)
+        if not math.isfinite(value):
+            output.append(math.nan)
+            continue
+        history.append(value)
         if len(history) > window:
             history.pop(0)
         output.append(sum(history) / len(history) if history else math.nan)
@@ -86,9 +85,13 @@ def _config_metadata(run: str) -> dict[str, Any]:
         "use_lsd_gate": bool(gate) if gate is not None else not no_gate,
         "fm_only_steps": action.get("fm_only_steps"),
         "w_lsd": action.get("w_lsd"),
+        "fm_curriculum_steps": action.get("fm_curriculum_steps"),
+        "p_fm": action.get("p_fm"),
+        "p_k1": action.get("p_k1"),
         "finite_difference_delta": action.get("finite_difference_delta"),
         "action_horizon": action.get("action_horizon"),
         "execution_horizon": action.get("execution_horizon"),
+        "seed": data.get("seed"),
     }
 
 
@@ -169,6 +172,7 @@ def _read_log_rows(run_info: dict[str, Any], metadata: dict[str, Any], max_step:
         for name in (
             "use_ot",
             "fm_loss",
+            "fm_loss_active",
             "lsd_loss",
             "lsd_loss_raw",
             "lsd_loss_metric",
@@ -177,6 +181,7 @@ def _read_log_rows(run_info: dict[str, Any], metadata: dict[str, Any], max_step:
             "lsd_scaling_enabled",
             "lsd_keep_frac",
             "lsd_active_sample_frac",
+            "active_lsd_frac",
             "p_fm",
             "fm_only",
             "fm_only_steps",
@@ -189,6 +194,13 @@ def _read_log_rows(run_info: dict[str, Any], metadata: dict[str, Any], max_step:
         row.update(metadata)
         fm, raw = row["fm_loss"], row["lsd_loss_raw"]
         row["lsd_over_fm"] = raw / fm if math.isfinite(raw) and math.isfinite(fm) and fm > 0 else math.nan
+        active_fm = row.get("fm_loss_active", math.nan)
+        budget = float(metadata.get("w_lsd") or 0.1) * active_fm
+        row["lsd_over_budget"] = (
+            raw / budget
+            if math.isfinite(raw) and math.isfinite(budget) and budget > 0
+            else math.nan
+        )
         rows.append(row)
     return rows
 
@@ -223,6 +235,13 @@ def _load_rows(manifest: dict[str, Any], max_step: int | None) -> tuple[list[dic
             fm = row.get("fm_loss", math.nan)
             raw = row.get("lsd_loss_raw", math.nan)
             row["lsd_over_fm"] = raw / fm if math.isfinite(raw) and math.isfinite(fm) and fm > 0 else math.nan
+            active_fm = row.get("fm_loss_active", math.nan)
+            budget = float(metadata[row["run"]].get("w_lsd") or 0.1) * active_fm
+            row["lsd_over_budget"] = (
+                raw / budget
+                if math.isfinite(raw) and math.isfinite(budget) and budget > 0
+                else math.nan
+            )
             rows.append(row)
     if not rows:
         raise RuntimeError("no agibot-g1 rows selected")
@@ -234,9 +253,15 @@ def _run_label(run: str, label: str) -> str:
     no_ot = "no_ot" in run or "no OT" in label
     no_scaling = "no_scaling" in run or "w/o scaling" in label
     no_gate = "no_gate" in run or "no mask" in label
-    factors = ("−S" if no_scaling else "+S") + ("−G" if no_gate else "+G")
     collapsed = no_scaling and no_gate
-    return f"{'no-OT' if no_ot else 'OT'} · {factors}" + (" · collapse" if collapsed else "")
+    prefix = "no-OT" if no_ot else "OT"
+    if collapsed:
+        return f"{prefix} · unstable (−S−G)"
+    if no_scaling:
+        return f"{prefix} · gate only (−S+G)"
+    if no_gate:
+        return f"{prefix} · scaling only (+S−G)"
+    return f"{prefix} · full (+S+G)"
 
 
 def _run_style(run: str, label: str) -> tuple[str, str, float, str]:
@@ -244,22 +269,32 @@ def _run_style(run: str, label: str) -> tuple[str, str, float, str]:
     no_ot = "no_ot" in run or "no OT" in label
     no_scaling = "no_scaling" in run or "w/o scaling" in label
     no_gate = "no_gate" in run or "no mask" in label
+    prefix = "no-OT" if no_ot else "OT"
     # Removing both protections is the collapse control even when an older
     # manifest did not include the parenthetical "(collapsed)" label.
     collapsed = no_scaling and no_gate
     if collapsed and no_ot:
-        return "#7b2cbf", "--", 2.4, "no-OT · −S−G · collapse"
+        return "#7b2cbf", "--", 2.4, "no-OT · unstable (−S−G)"
     if collapsed:
-        return "#d55e00", "-", 2.4, "OT · −S−G · collapse"
+        return "#d55e00", "-", 2.4, "OT · unstable (−S−G)"
     if no_scaling:
-        return "#e69f00", "-", 2.0, "OT · −S+G"
+        return "#e69f00", "--" if no_ot else "-", 2.0, f"{prefix} · gate only (−S+G)"
     if no_gate:
-        return "#0072b2", "-", 1.9, "OT · +S−G"
-    return "#009e73", "-", 2.5, "OT · +S+G (full)"
+        return "#0072b2", "--" if no_ot else "-", 1.9, f"{prefix} · scaling only (+S−G)"
+    return "#009e73", "--" if no_ot else "-", 2.5, f"{prefix} · full (+S+G)"
 
 
 def _finite_values(group: list[dict[str, Any]], key: str) -> list[float]:
     return [row[key] for row in group if math.isfinite(row.get(key, math.nan))]
+
+
+def _value_at_or_before(group: list[dict[str, Any]], key: str, step: int) -> float:
+    """Use the last finite observation at or before a common step."""
+    candidates = [
+        row for row in group
+        if row["step"] <= step and math.isfinite(row.get(key, math.nan))
+    ]
+    return candidates[-1][key] if candidates else math.nan
 
 
 def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: Path, window: int) -> None:
@@ -277,6 +312,15 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
             by_run[run] = []
         by_run[run].append(row)
 
+    # Runs often stop at slightly different logging steps. Clip the visual
+    # comparison to the common observed horizon; the report still records each
+    # run's true last step.
+    common_end = min(
+        max(row["step"] for row in group)
+        for group in by_run.values()
+        if group
+    )
+
     fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.4), sharex=True, constrained_layout=False)
     ax_fm, ax_raw, ax_gate, ax_ratio = axes.flat
     legend_handles = []
@@ -287,19 +331,19 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
         x = [row["step"] for row in group]
         fm = [row.get("fm_loss", math.nan) for row in group]
         raw = [row.get("lsd_loss_raw", math.nan) for row in group]
-        accepted = [row.get("lsd_loss", math.nan) for row in group]
-        reject = [row.get("lsd_gate_active", math.nan) for row in group]
-        ratio = [row.get("lsd_over_fm", math.nan) for row in group]
+        reject = [
+            100.0 * row.get("lsd_gate_active", math.nan)
+            if math.isfinite(row.get("lsd_gate_active", math.nan))
+            else math.nan
+            for row in group
+        ]
+        ratio = [row.get("lsd_over_budget", math.nan) for row in group]
         # FM is smoothed for readability. Raw LSD and pressure remain unsmoothed
         # in a faint trace, with a thicker causal trend overlaid.
         line, = ax_fm.plot(x, _moving_average(fm, window), color=color, lw=linewidth, ls=line_style, label=label)
         legend_handles.append(line)
         ax_raw.plot(x, raw, color=color, lw=0.8, ls=line_style, alpha=0.22)
         ax_raw.plot(x, _moving_average(raw, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
-        # The accepted curve is only visually useful when the gate actually
-        # rejects samples; draw it as a thin dotted companion to raw LSD.
-        if any(value > 0 for value in reject if math.isfinite(value)):
-            ax_raw.plot(x, accepted, color=color, lw=1.0, ls=":", alpha=0.9)
         ax_gate.plot(x, reject, color=color, lw=linewidth, ls=line_style)
         ax_ratio.plot(x, ratio, color=color, lw=0.8, ls=line_style, alpha=0.22)
         ax_ratio.plot(x, _moving_average(ratio, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
@@ -308,8 +352,9 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
         # is derived from the observed minimum rather than a hard-coded step.
         no_scaling = "no_scaling" in run or "w/o scaling" in original_label
         no_gate = "no_gate" in run or "no mask" in original_label
-        if no_scaling and no_gate and _finite_values(group, "fm_loss"):
-            finite_fm = [(row["step"], row["fm_loss"]) for row in group if math.isfinite(row.get("fm_loss", math.nan))]
+        window_group = [row for row in group if row["step"] <= common_end]
+        if no_scaling and no_gate and _finite_values(window_group, "fm_loss"):
+            finite_fm = [(row["step"], row["fm_loss"]) for row in window_group if math.isfinite(row.get("fm_loss", math.nan))]
             min_step, min_fm = min(finite_fm, key=lambda item: item[1])
             no_ot = "no_ot" in run or "no OT" in original_label
             text_x = min_step + (210 if no_ot else 95)
@@ -328,30 +373,53 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
     ax_raw.set_title("B  Raw LSD magnitude", loc="left", fontweight="bold")
     ax_raw.set_ylabel("LSD loss (pre-gate)")
     ax_raw.set_yscale("log")
-    ax_raw.text(0.02, 0.95, "faint = individual logs\nthick = causal trend\ndotted = accepted (when gated)", transform=ax_raw.transAxes, va="top", fontsize=8.5)
+    ax_raw.text(0.02, 0.95, "faint = individual logs\nthick = causal trend", transform=ax_raw.transAxes, va="top", fontsize=8.5)
     ax_gate.set_title("C  Gate behavior", loc="left", fontweight="bold")
-    ax_gate.set_ylabel("rejection fraction (0–1)")
-    ax_gate.set_ylim(-0.03, 1.03)
-    ax_ratio.set_title("D  LSD pressure relative to FM", loc="left", fontweight="bold")
-    ax_ratio.set_ylabel("raw LSD / FM")
+    ax_gate.set_ylabel("rejection among active samples (%)")
+    ax_gate.set_ylim(-2.0, 102.0)
+    ax_gate.set_yticks([0, 25, 50, 75, 100])
+    # A zero rejection value is ambiguous when no LSD token was active. Show
+    # active-token coverage as a neutral reference on the same 0–100 scale.
+    active_by_step: dict[int, list[float]] = {}
+    for row in rows:
+        value = row.get("active_lsd_frac", math.nan)
+        if math.isfinite(value):
+            active_by_step.setdefault(int(row["step"]), []).append(100.0 * value)
+    if active_by_step:
+        active_steps = sorted(active_by_step)
+        active_values = [sum(active_by_step[step]) / len(active_by_step[step]) for step in active_steps]
+        ax_gate.plot(active_steps, active_values, color="#777777", lw=1.4, ls=":", alpha=0.9)
+        ax_gate.text(0.02, 0.90, "gray dotted = active-token coverage", transform=ax_gate.transAxes, fontsize=8.5)
+    ax_ratio.set_title("D  Raw LSD relative to its budget", loc="left", fontweight="bold")
+    ax_ratio.set_ylabel("raw LSD / (w_lsd · FM_active)")
     ax_ratio.set_yscale("log")
-    ax_ratio.axhline(0.1, color="#555555", lw=1, ls=":", alpha=0.8)
-    ax_ratio.text(0.02, 0.95, "dotted reference = w_lsd budget (0.1)", transform=ax_ratio.transAxes, va="top", fontsize=8.5)
+    ax_ratio.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
+    ax_ratio.text(0.02, 0.95, "reference = 1; global proxy\nactual gate is sample-wise", transform=ax_ratio.transAxes, va="top", fontsize=8.5)
     for axis in axes.flat:
         axis.grid(True, alpha=0.22, linewidth=0.7)
         axis.set_xlabel("training step")
+        axis.set_xlim(0, common_end)
 
     initializations = sorted({info["initialization"] for info in metadata.values()})
     caveat = "; ".join(initializations)
-    scope = "OT only" if all(not ("no_ot" in run) for run in order) else "OT and no-OT controls"
+    scope = "OT only" if all(not ("no_ot" in run) for run in order) else "OT and no-OT stress controls"
     fig.suptitle(
         f"RollFlow stability ablation on G1 ({scope})",
         fontsize=16,
         fontweight="bold",
+        y=0.99,
     )
     fig.text(
         0.5,
-        0.925,
+        0.945,
+        f"Agibot G1 · H{next(iter(metadata.values())).get('action_horizon') or '?'} / C{next(iter(metadata.values())).get('execution_horizon') or '?'} · {caveat} · seed {next(iter(metadata.values())).get('seed')}",
+        ha="center",
+        fontsize=10,
+        color="#444444",
+    )
+    fig.text(
+        0.5,
+        0.915,
         "S = central-difference scaling (2δ)   ·   G = sample-wise LSD gate   ·   lower FM/pressure is better",
         ha="center",
         fontsize=10,
@@ -361,8 +429,8 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
         legend_handles,
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.895),
-        ncol=3,
+        bbox_to_anchor=(0.5, 0.875),
+        ncol=max(1, len(legend_handles)),
         fontsize=9.5,
         frameon=False,
         columnspacing=1.4,
@@ -371,7 +439,7 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
     fig.text(
         0.5,
         0.035,
-        f"Matched historical window: {caveat}; FM = causal moving average (window={window}); raw LSD is unsmoothed.",
+        f"Matched historical window: {caveat}; common comparison through step {common_end}; FM = causal moving average (window={window}); raw LSD is unsmoothed.",
         ha="center",
         fontsize=9.0,
         color="#444444",
@@ -384,7 +452,7 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
         fontsize=9.0,
         color="#444444",
     )
-    fig.subplots_adjust(top=0.80, bottom=0.125, left=0.075, right=0.985, hspace=0.28, wspace=0.22)
+    fig.subplots_adjust(top=0.755, bottom=0.125, left=0.075, right=0.985, hspace=0.28, wspace=0.22)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220)
     fig.savefig(out.with_suffix(".pdf"))
@@ -406,6 +474,11 @@ def _write_manifest(
     corrected["filter"] = dict(corrected.get("filter", {}))
     if max_step is not None:
         corrected["filter"]["max_step"] = max_step
+    if rows:
+        by_run: dict[str, list[int]] = {}
+        for row in rows:
+            by_run.setdefault(row["run"], []).append(int(row["step"]))
+        corrected["filter"]["common_end_step"] = min(max(steps) for steps in by_run.values())
     corrected["smoothing"] = {
         "fm": f"causal moving average, window={window}",
         "lsd_raw": "none (spikes are stability evidence)",
@@ -413,10 +486,11 @@ def _write_manifest(
     }
     corrected["metric"] = {
         "fm": "fm_loss",
+        "fm_active": "fm_loss_active",
         "lsd_raw": "lsd_loss_raw (pre-gate, includes 2*delta scaling when enabled)",
         "lsd_accepted": "lsd_loss (post-gate contribution)",
         "gate_rejection": "lsd_gate_active (active-sample rejection fraction)",
-        "pressure_ratio": "lsd_loss_raw / fm_loss",
+        "pressure_ratio": "lsd_loss_raw / (w_lsd * fm_loss_active); global proxy for sample-wise gate",
     }
     corrected["provenance"] = {
         "runs": metadata,
@@ -434,7 +508,7 @@ def _write_manifest(
     }
     if report is not None:
         corrected["outputs"]["report"] = str(report)
-    out_manifest = destination or out.with_name("g1_ot_loss_manifest_corrected.json")
+    out_manifest = destination or out.with_name(f"{out.stem}_manifest.json")
     out_manifest.write_text(json.dumps(corrected, indent=2, ensure_ascii=False) + "\n")
     return out_manifest
 
@@ -450,6 +524,11 @@ def _write_report(
     by_run: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_run.setdefault(row["run"], []).append(row)
+    common_end = min(
+        max(row["step"] for row in group)
+        for group in by_run.values()
+        if group
+    )
 
     def fmt(value: float) -> str:
         return "—" if not math.isfinite(value) else f"{value:.3g}"
@@ -460,9 +539,10 @@ def _write_report(
         group = sorted(by_run.get(run, []), key=lambda row: row["step"])
         if not group:
             continue
-        fm = _finite_values(group, "fm_loss")
-        pressure = _finite_values(group, "lsd_over_fm")
-        rejection = _finite_values(group, "lsd_gate_active")
+        window_group = [row for row in group if row["step"] <= common_end]
+        fm = _finite_values(window_group, "fm_loss")
+        pressure = _finite_values(window_group, "lsd_over_budget")
+        rejection = _finite_values(window_group, "lsd_gate_active")
         min_fm = min(fm) if fm else math.nan
         min_step = next(
             (row["step"] for row in group if row.get("fm_loss") == min_fm),
@@ -478,9 +558,10 @@ def _write_report(
                     "on" if metadata[run]["use_lsd_gate"] else "off",
                     fmt(min_fm),
                     str(int(min_step)) if math.isfinite(min_step) else "—",
-                    fmt(group[-1].get("fm_loss", math.nan)),
+                    fmt(_value_at_or_before(group, "fm_loss", common_end)),
+                    str(group[-1]["step"]),
                     fmt(max(pressure) if pressure else math.nan),
-                    fmt(max(rejection) if rejection else math.nan),
+                    fmt(100.0 * max(rejection) if rejection else math.nan) + "%",
                 )
             )
             + " |"
@@ -492,6 +573,12 @@ def _write_report(
         "A post-gate LSD curve can be zero because the gate rejected the update; raw LSD and rejection rate are therefore shown separately.",
     ]
     figure_name = figure.name
+    settings = next(iter(metadata.values()))
+    scope_line = (
+        f"Configuration scope: H{settings.get('action_horizon') or '?'} / C{settings.get('execution_horizon') or '?'}, "
+        f"`fm_curriculum_steps={settings.get('fm_curriculum_steps')}`, `p_fm={settings.get('p_fm')}`, "
+        f"`w_lsd={settings.get('w_lsd')}`, seed `{settings.get('seed')}`."
+    )
     text = "\n".join(
         [
             "# RollFlow G1 stability ablation",
@@ -504,19 +591,23 @@ def _write_report(
             "- **G (gate/mask)** rejects non-finite or over-budget per-sample LSD updates.",
             "- **OT** denotes optimal-transport matching of noise to target trajectories.",
             "",
+            scope_line,
+            "",
             "Panel A is the training FM objective. Panels B and D expose the raw LSD pressure before the gate; Panel C shows how many active samples are rejected (an intervention signal, not a quantity to minimize blindly). The faint traces are individual log values and the thick traces are causal moving averages. The two `−S−G` controls are explicitly marked because both show FM rebound after their minimum.",
             "",
             "## Observed window",
             "",
-            "| run | OT | S | G | min FM | min step | final FM | peak raw LSD/FM | peak rejection |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            f"Common comparison step: `{common_end}`. `FM @ common` is the last observation at or before that step; `last step` is the run's actual endpoint.",
+            "",
+            "| run | OT | S | G | min FM | min step | FM @ common | last step | peak raw LSD/budget | peak rejection (%) |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
             *table,
             "",
             "## Interpretation",
             "",
-            "In this matched historical window, scaling keeps raw LSD pressure near the FM scale. Removing scaling makes the raw pressure exceed the `w_lsd=0.1` budget; the gate then rejects the offending updates. Removing both protections produces the two observed collapse controls (OT and no-OT), where FM first improves and then rebounds.",
+            "In this matched historical window, scaling keeps the global raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; the gate then rejects the offending sample updates. Removing both protections produces the two observed unstable controls (OT and no-OT), where FM first improves and then rebounds.",
             "",
-            "The stable `OT · +S−G` control shows that the gate is not always active once scaling is present. It does **not** establish that removing the gate is safe from scratch; a factorial scratch ablation is required for that claim.",
+            "Both available scaling-only `+S−G` controls (OT and no-OT) remain stable in this window, so the observed rebound is not attributable to OT alone. The gate is not always active once scaling is present. This does **not** establish that removing the gate is safe from scratch; a factorial scratch ablation is required for that claim.",
             "",
             "## Scope and limitations",
             "",
@@ -537,7 +628,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/g1_ot_paper/g1_ot_stability_paper_0_2000.png"),
+        default=Path("/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/g1_ot_paper/g1_stability_all_paper_0_2500.png"),
     )
     parser.add_argument("--manifest-output", type=Path, default=None)
     parser.add_argument("--report-output", type=Path, default=None)

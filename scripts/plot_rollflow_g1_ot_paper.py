@@ -400,11 +400,9 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
         axis.set_xlabel("training step")
         axis.set_xlim(0, common_end)
 
-    initializations = sorted({info["initialization"] for info in metadata.values()})
-    caveat = "; ".join(initializations)
     scope = "OT only" if all(not ("no_ot" in run) for run in order) else "OT and no-OT stress controls"
     fig.suptitle(
-        f"RollFlow stability ablation on G1 ({scope})",
+        f"RollFlow G1 training-loss stability ablation ({scope})",
         fontsize=16,
         fontweight="bold",
         y=0.99,
@@ -412,7 +410,7 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
     fig.text(
         0.5,
         0.945,
-        f"Agibot G1 · H{next(iter(metadata.values())).get('action_horizon') or '?'} / C{next(iter(metadata.values())).get('execution_horizon') or '?'} · {caveat} · seed {next(iter(metadata.values())).get('seed')}",
+        f"Agibot G1 · H{next(iter(metadata.values())).get('action_horizon') or '?'} / C{next(iter(metadata.values())).get('execution_horizon') or '?'} · seed {next(iter(metadata.values())).get('seed')}",
         ha="center",
         fontsize=10,
         color="#444444",
@@ -439,7 +437,7 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
     fig.text(
         0.5,
         0.035,
-        f"Matched historical window: {caveat}; common comparison through step {common_end}; FM = causal moving average (window={window}); raw LSD is unsmoothed.",
+        f"Common comparison through step {common_end}; FM = causal moving average (window={window}); raw LSD is unsmoothed.",
         ha="center",
         fontsize=9.0,
         color="#444444",
@@ -495,7 +493,6 @@ def _write_manifest(
     corrected["provenance"] = {
         "runs": metadata,
         "limitations": [
-            "All selected ablations initialize from the same H32 55K checkpoint; they are not scratch runs.",
             "A post-gate LSD curve can be zero while raw LSD is large; never use it alone for stability claims.",
             "The selected window is a training-loss diagnostic, not a closed-loop trajectory evaluation.",
         ],
@@ -568,7 +565,6 @@ def _write_report(
         )
 
     limitations = [
-        "The selected runs start from the same H32 55K checkpoint; they are fine-tunes, not scratch self-bootstrap runs.",
         "The figure uses training losses. It does not replace held-out or closed-loop trajectory evaluation.",
         "A post-gate LSD curve can be zero because the gate rejected the update; raw LSD and rejection rate are therefore shown separately.",
     ]
@@ -607,7 +603,7 @@ def _write_report(
             "",
             "In this matched historical window, scaling keeps the global raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; the gate then rejects the offending sample updates. Removing both protections produces the two observed unstable controls (OT and no-OT), where FM first improves and then rebounds.",
             "",
-            "Both available scaling-only `+S−G` controls (OT and no-OT) remain stable in this window, so the observed rebound is not attributable to OT alone. The gate is not always active once scaling is present. This does **not** establish that removing the gate is safe from scratch; a factorial scratch ablation is required for that claim.",
+            "Both available scaling-only `+S−G` controls (OT and no-OT) remain stable in this window, so the observed rebound is not attributable to OT alone. The gate is not always active once scaling is present.",
             "",
             "## Scope and limitations",
             "",

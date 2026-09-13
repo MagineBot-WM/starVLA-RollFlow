@@ -297,7 +297,7 @@ def _value_at_or_before(group: list[dict[str, Any]], key: str, step: int) -> flo
     return candidates[-1][key] if candidates else math.nan
 
 
-def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: Path, window: int) -> None:
+def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -324,7 +324,7 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
     fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.4), sharex=True, constrained_layout=False)
     ax_fm, ax_raw, ax_gate, ax_ratio = axes.flat
     legend_handles = []
-    for index, run in enumerate(order):
+    for run in order:
         group = sorted(by_run[run], key=lambda row: row["step"])
         original_label = group[0]["label"]
         color, line_style, linewidth, label = _run_style(run, original_label)
@@ -564,7 +564,7 @@ def main() -> None:
     if max_step is None:
         max_step = manifest.get("filter", {}).get("max_step")
     rows, metadata = _load_rows(manifest, max_step)
-    _plot(rows, metadata, args.output, args.window)
+    _plot(rows, args.output, args.window)
     report_output = args.report_output or args.output.with_suffix(".md")
     manifest_output = _write_manifest(
         manifest,

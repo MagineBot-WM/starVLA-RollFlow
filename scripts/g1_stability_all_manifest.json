@@ -1,0 +1,34 @@
+{
+  "filter": {
+    "embodiment": "agibot-g1",
+    "max_step": 2500
+  },
+  "rows": "/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/six_runs/all_runs.csv",
+  "runs": [
+    {
+      "run": "libero10hz_pick_up_the_apple_ablation_ot_gate_55k_20k_v1",
+      "label": "OT: full (scaling + mask)",
+      "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_ot_gate_55k_20k_v1/train.log"
+    },
+    {
+      "run": "libero10hz_pick_up_the_apple_ablation_ot_no_gate_55k_20k_v1",
+      "label": "OT: w/o mask",
+      "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_ot_no_gate_55k_20k_v1/train.log"
+    },
+    {
+      "run": "libero10hz_pick_up_the_apple_ablation_ot_gate_no_scaling_55k_20k_v1",
+      "label": "OT: w/o scaling",
+      "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_ot_gate_no_scaling_55k_20k_v1/train.log"
+    },
+    {
+      "run": "libero10hz_pick_up_the_apple_ablation_ot_no_gate_no_scaling_55k_20k_v1",
+      "label": "OT: w/o scaling + mask (collapsed)",
+      "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_ot_no_gate_no_scaling_55k_20k_v1/train.log"
+    },
+    {
+      "run": "libero10hz_pick_up_the_apple_ablation_no_ot_no_gate_no_scaling_55k_20k_v1",
+      "label": "no OT: w/o scaling + mask (collapsed)",
+      "log": "/data/tzq/starVLA_checkpoints/libero10hz_pick_up_the_apple_ablation_no_ot_no_gate_no_scaling_55k_20k_v1/train.log"
+    }
+  ]
+}

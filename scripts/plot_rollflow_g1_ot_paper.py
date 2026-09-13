@@ -348,109 +348,37 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
         ax_ratio.plot(x, ratio, color=color, lw=0.8, ls=line_style, alpha=0.22)
         ax_ratio.plot(x, _moving_average(ratio, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
 
-        # Make the two collapse claims explicit on the FM panel. The annotation
-        # is derived from the observed minimum rather than a hard-coded step.
-        no_scaling = "no_scaling" in run or "w/o scaling" in original_label
-        no_gate = "no_gate" in run or "no mask" in original_label
-        window_group = [row for row in group if row["step"] <= common_end]
-        if no_scaling and no_gate and _finite_values(window_group, "fm_loss"):
-            finite_fm = [(row["step"], row["fm_loss"]) for row in window_group if math.isfinite(row.get("fm_loss", math.nan))]
-            min_step, min_fm = min(finite_fm, key=lambda item: item[1])
-            no_ot = "no_ot" in run or "no OT" in original_label
-            text_x = min_step + (210 if no_ot else 95)
-            text_y = min_fm + (0.07 if no_ot else 0.18)
-            ax_fm.annotate(
-                f"rebound ({'no-OT' if no_ot else 'OT'})",
-                xy=(min_step, min_fm),
-                xytext=(text_x, text_y),
-                color=color,
-                fontsize=9,
-                arrowprops={"arrowstyle": "->", "color": color, "lw": 1.0},
-            )
-
     ax_fm.set_title("A  FM objective", loc="left", fontweight="bold")
     ax_fm.set_ylabel("FM velocity MSE")
     ax_raw.set_title("B  Raw LSD magnitude", loc="left", fontweight="bold")
     ax_raw.set_ylabel("LSD loss (pre-gate)")
     ax_raw.set_yscale("log")
-    ax_raw.text(0.02, 0.95, "faint = individual logs\nthick = causal trend", transform=ax_raw.transAxes, va="top", fontsize=8.5)
     ax_gate.set_title("C  Gate behavior", loc="left", fontweight="bold")
     ax_gate.set_ylabel("rejection among active samples (%)")
     ax_gate.set_ylim(-2.0, 102.0)
     ax_gate.set_yticks([0, 25, 50, 75, 100])
-    # A zero rejection value is ambiguous when no LSD token was active. Show
-    # active-token coverage as a neutral reference on the same 0–100 scale.
-    active_by_step: dict[int, list[float]] = {}
-    for row in rows:
-        value = row.get("active_lsd_frac", math.nan)
-        if math.isfinite(value):
-            active_by_step.setdefault(int(row["step"]), []).append(100.0 * value)
-    if active_by_step:
-        active_steps = sorted(active_by_step)
-        active_values = [sum(active_by_step[step]) / len(active_by_step[step]) for step in active_steps]
-        ax_gate.plot(active_steps, active_values, color="#777777", lw=1.4, ls=":", alpha=0.9)
-        ax_gate.text(0.02, 0.90, "gray dotted = active-token coverage", transform=ax_gate.transAxes, fontsize=8.5)
-    ax_ratio.set_title("D  Raw LSD relative to its budget", loc="left", fontweight="bold")
-    ax_ratio.set_ylabel("raw LSD / (w_lsd · FM_active)")
+    ax_ratio.set_title("D  LSD / budget", loc="left", fontweight="bold")
+    ax_ratio.set_ylabel("raw LSD / budget")
     ax_ratio.set_yscale("log")
     ax_ratio.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
-    ax_ratio.text(0.02, 0.95, "reference = 1; global proxy\nactual gate is sample-wise", transform=ax_ratio.transAxes, va="top", fontsize=8.5)
     for axis in axes.flat:
         axis.grid(True, alpha=0.22, linewidth=0.7)
         axis.set_xlabel("training step")
         axis.set_xlim(0, common_end)
 
-    scope = "OT only" if all(not ("no_ot" in run) for run in order) else "OT and no-OT stress controls"
-    fig.suptitle(
-        f"RollFlow G1 training-loss stability ablation ({scope})",
-        fontsize=16,
-        fontweight="bold",
-        y=0.99,
-    )
-    fig.text(
-        0.5,
-        0.945,
-        f"Agibot G1 · H{next(iter(metadata.values())).get('action_horizon') or '?'} / C{next(iter(metadata.values())).get('execution_horizon') or '?'} · seed {next(iter(metadata.values())).get('seed')}",
-        ha="center",
-        fontsize=10,
-        color="#444444",
-    )
-    fig.text(
-        0.5,
-        0.915,
-        "S = central-difference scaling (2δ)   ·   G = sample-wise LSD gate   ·   lower FM/pressure is better",
-        ha="center",
-        fontsize=10,
-        color="#444444",
-    )
+    fig.suptitle("RollFlow G1 stability ablation", fontsize=16, fontweight="bold", y=0.98)
     fig.legend(
         legend_handles,
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.875),
+        bbox_to_anchor=(0.5, 0.935),
         ncol=max(1, len(legend_handles)),
-        fontsize=9.5,
+        fontsize=9.0,
         frameon=False,
         columnspacing=1.4,
         handlelength=2.6,
     )
-    fig.text(
-        0.5,
-        0.035,
-        f"Common comparison through step {common_end}; FM = causal moving average (window={window}); raw LSD is unsmoothed.",
-        ha="center",
-        fontsize=9.0,
-        color="#444444",
-    )
-    fig.text(
-        0.5,
-        0.012,
-        "Both −S−G controls show FM rebound. This is a training-loss stability diagnostic, not a closed-loop success evaluation.",
-        ha="center",
-        fontsize=9.0,
-        color="#444444",
-    )
-    fig.subplots_adjust(top=0.755, bottom=0.125, left=0.075, right=0.985, hspace=0.28, wspace=0.22)
+    fig.subplots_adjust(top=0.84, bottom=0.095, left=0.075, right=0.985, hspace=0.28, wspace=0.22)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220)
     fig.savefig(out.with_suffix(".pdf"))

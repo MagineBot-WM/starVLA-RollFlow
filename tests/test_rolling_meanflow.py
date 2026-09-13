@@ -108,8 +108,7 @@ def _config(**overrides):
         "inference_steps": 4,
         "p_k1": 1.0,
         "p_fm": 0.0,
-        "fm_curriculum_steps": 0,
-        "w_fm": 1.0,
+        "fm_only_steps": 0,
         "w_lsd": 0.1,
         "use_ot": False,
         "iterative_cold_start": True,
@@ -172,9 +171,7 @@ def test_grouped_training_times_match_32_by_8_design():
     )
     sampler = StaircaseTimeSampler(cfg)
     for k, block_size in ((1, 4), (2, 2), (4, 1)):
-        sampled = sampler.sample_training(
-            3, device="cpu", p_fm=1.0, num_time_groups=k
-        )
+        sampled = sampler.sample_training(3, device="cpu", p_fm=1.0, num_time_groups=k)
         assert sampled.block_size == block_size
         assert sampled.num_time_groups == k
         assert not sampled.active.any()
@@ -192,25 +189,47 @@ def test_k_sampling_probabilities_and_config_validation():
         assert counts[k] / 4000 == pytest.approx(0.1, abs=0.025)
     with pytest.raises(ValueError, match="p_fm"):
         _config(p_fm=1.1)
+    with pytest.raises(ValueError, match="finite"):
+        _config(w_lsd=float("nan"))
 
 
-def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():
+def test_fm_only_warmup_then_fixed_mixture():
     torch.manual_seed(0)
-    rollflow = RollFlow(_config(p_fm=0.2, fm_curriculum_steps=100))
+    rollflow = RollFlow(_config(p_fm=0.5, fm_only_steps=10))
     model = _LearnableConstant()
     actions = torch.randn(32, 8, 1)
 
     _, start = rollflow.loss(model, actions, step=0)
+    assert start["fm_only"] == 1.0
+    assert start["fm_only_steps"] == 10
     assert start["p_fm"] == 1.0
     assert start["fm_only_frac"] == 1.0
     assert start["active_lsd_frac"] == 0.0
-    assert model.batch_sizes == [32, 32, 96]
+    # The diagonal FM-only stage uses one endpoint forward and skips LSD.
+    assert model.batch_sizes == [32]
     assert start["lsd_loss"] == 0.0
 
-    _, middle = rollflow.loss(model, actions, step=50)
-    _, end = rollflow.loss(model, actions, step=100)
-    assert middle["p_fm"] == pytest.approx(0.6)
-    assert end["p_fm"] == pytest.approx(0.2)
+    _, warmup_end = rollflow.loss(model, actions, step=9)
+    assert warmup_end["p_fm"] == 1.0
+    _, fixed = rollflow.loss(model, actions, step=10)
+    assert fixed["fm_only"] == 0.0
+    assert fixed["p_fm"] == 0.5
+    _, fixed_later = rollflow.loss(model, actions, step=100)
+    assert fixed_later["p_fm"] == 0.5
+
+
+def test_fm_fast_path_retains_full_fm_supervision():
+    model = _LearnableConstant()
+    x0 = torch.zeros(2, 8, 1)
+    x1 = torch.ones_like(x0)
+    times = torch.full_like(x0, 0.5)
+    loss, stats = central_difference_lsd(model, x0, x1, times, times, delta=0.01)
+    assert loss.requires_grad
+    assert loss.item() == pytest.approx(1.0)
+    assert stats["lsd_loss"] == 0.0
+    loss.backward()
+    assert model.batch_sizes == [2]
+    assert model.value.grad.item() == pytest.approx(-2.0)
 
 
 def test_linear_path_oracle_has_zero_fm_and_lsd_error():
@@ -234,7 +253,6 @@ def test_linear_path_oracle_has_zero_fm_and_lsd_error():
         delta=cfg.finite_difference_delta,
         active=times.active,
         context=x1,
-        w_fm=cfg.w_fm,
         w_lsd=1.0,
     )
 
@@ -254,7 +272,6 @@ def test_lsd_scaling_can_be_disabled_for_historical_ablation():
         s,
         t,
         delta=0.01,
-        w_fm=0,
         w_lsd=1,
         use_lsd_scaling=False,
         use_lsd_gate=False,
@@ -262,7 +279,7 @@ def test_lsd_scaling_can_be_disabled_for_historical_ablation():
 
     assert stats["lsd_scaling_enabled"] == 0.0
     assert stats["lsd_loss_raw"] == stats["lsd_loss_metric"]
-    assert loss.item() == pytest.approx(stats["lsd_loss_raw"].item(), abs=1e-5)
+    assert loss.item() == pytest.approx(stats["fm_loss"].item() + stats["lsd_loss_raw"].item(), abs=1e-5)
     assert torch.isfinite(loss)
     loss.backward()
     assert model.value.grad is not None and torch.isfinite(model.value.grad)
@@ -282,12 +299,12 @@ def test_lsd_scalar_is_hard_masked_by_detached_fm_budget():
         s,
         t,
         delta=0.01,
-        w_fm=1.0,
         w_lsd=1.0,
     )
 
     assert stats["lsd_loss_raw"] > stats["fm_loss"]
     assert stats["lsd_gate_active"] == 1.0
+    assert stats["lsd_finite_frac"] == 1.0
     assert stats["lsd_loss"] == 0.0
     loss.backward()
     # The over-budget LSD branch is hard-masked; only FM contributes.
@@ -308,7 +325,6 @@ def test_lsd_gate_can_be_disabled_without_changing_fm_supervision():
         s,
         t,
         delta=0.01,
-        w_fm=1.0,
         w_lsd=1.0,
         use_lsd_gate=False,
     )
@@ -336,7 +352,6 @@ def test_lsd_gate_is_truly_samplewise_and_preserves_accepted_sample_gradient():
         t,
         delta=0.01,
         context=context,
-        w_fm=1.0,
         w_lsd=1.0,
     )
 
@@ -367,7 +382,6 @@ def test_nonfinite_lsd_is_dropped_without_poisoning_fm():
         s,
         t,
         delta=0.01,
-        w_fm=1.0,
         w_lsd=1.0,
     )
 
@@ -378,6 +392,28 @@ def test_nonfinite_lsd_is_dropped_without_poisoning_fm():
     assert model.value.grad is not None
     assert torch.isfinite(model.value.grad)
     assert model.value.grad.item() == pytest.approx(0.0, abs=1e-6)
+
+
+def test_rejected_samples_stay_in_lsd_token_denominator():
+    model = _SamplewiseTangentResidual()
+    x = torch.zeros(2, 4, 1)
+    s, t = torch.full_like(x, 0.2), torch.full_like(x, 0.6)
+    context = torch.tensor([[[1.0]], [[0.0]]])
+    # One high-residual token is rejected; three low-residual tokens remain.
+    pad = torch.tensor([[False, True, True, True], [False, False, False, True]])
+    loss, stats = central_difference_lsd(model, x, x, s, t, delta=0.01, context=context, pad=pad, w_lsd=1.0)
+
+    assert stats["lsd_keep_per_sample"].tolist() == [False, True]
+    assert stats["lsd_finite_frac"].item() == 1.0
+    assert stats["lsd_keep_token_frac"].item() == pytest.approx(0.75)
+    # u=theta*(1+a*(t-s)): dX/dt=theta*(1+2*a*(t-s)), teacher=stopgrad(theta).
+    residual = 2 * 0.1 * 0.4
+    expected_lsd = 0.75 * 0.02 * residual**2
+    assert stats["lsd_loss"].item() == pytest.approx(expected_lsd, abs=1e-7)
+    assert loss.item() == pytest.approx(1.0 + expected_lsd)
+    loss.backward()
+    expected_gradient = 2.0 + 0.75 * 0.02 * 2 * residual * (1 + residual)
+    assert model.value.grad.item() == pytest.approx(expected_gradient, abs=1e-5)
 
 
 def test_loss_retains_gradients_only_for_tangent_and_local_paths():
@@ -443,18 +479,64 @@ def test_padded_rows_run_forwards_but_are_excluded_from_lsd_loss():
     assert stats["active_lsd_frac"] == 0.25
 
 
+def test_padding_does_not_mutate_caller_active_mask():
+    x = torch.zeros(2, 4, 1)
+    s, t = torch.full_like(x, 0.2), torch.full_like(x, 0.6)
+    active = torch.ones_like(x, dtype=torch.bool)
+    original = active.clone()
+    pad = torch.tensor([[False, True, True, True], [False, False, False, False]])
+    central_difference_lsd(_LearnableConstant(), x, x, s, t, delta=0.01, active=active, pad=pad)
+    assert torch.equal(active, original)
+
+
+def test_keep_fraction_excludes_diagonal_samples():
+    x = torch.zeros(2, 4, 1)
+    s, t = torch.full_like(x, 0.2), torch.full_like(x, 0.6)
+    s[0] = t[0]
+    _, stats = central_difference_lsd(_LearnableConstant(), x, x, s, t, delta=0.01)
+    assert stats["lsd_keep_frac"].item() == 1.0
+    assert stats["lsd_active_sample_frac"].item() == 0.5
+
+
+def test_nonfinite_teacher_fails_before_student_backward():
+    class BadTeacher(_LearnableConstant):
+        def forward(self, *args, **kwargs):
+            out = super().forward(*args, **kwargs)
+            return torch.full_like(out, float("nan")) if len(self.batch_sizes) == 2 else out
+
+    x = torch.zeros(1, 4, 1)
+    model = BadTeacher()
+    with pytest.raises(FloatingPointError, match="teacher"):
+        central_difference_lsd(model, x, x, torch.full_like(x, 0.2), torch.full_like(x, 0.6), delta=0.01)
+    assert model.batch_sizes == [1, 1]
+    assert model.value.grad is None
+
+
+def test_bfloat16_inference_preserves_float32_time_grid():
+    class TimeRecorder(_LearnableConstant):
+        def forward(self, z, s, t, *args, **kwargs):
+            self.times = (s, t)
+            return super().forward(z, s, t, *args, **kwargs)
+
+    model = TimeRecorder()
+    flow = RollFlow(_config(inference_steps=3, iterative_cold_start=False))
+    output = flow.step(model, 1, device="cpu", dtype=torch.bfloat16)
+    s, t = model.times
+    assert output.dtype == torch.bfloat16
+    assert s.dtype == t.dtype == torch.float32
+    torch.testing.assert_close(t[0, :3, 0], torch.tensor([1.0, 2 / 3, 1 / 3]))
+
+
 def test_training_input_shapes_are_checked():
     x0 = torch.randn(2, 8, 1)
     x1 = torch.randn_like(x0)
     times = torch.zeros(2, 8, 1)
     with pytest.raises(ValueError, match="x0 and x1"):
-        central_difference_lsd(
-            _LearnableConstant(), x0, x1[:, :-1], times, times, delta=0.01
-        )
+        central_difference_lsd(_LearnableConstant(), x0, x1[:, :-1], times, times, delta=0.01)
     with pytest.raises(ValueError, match="s and t"):
-        central_difference_lsd(
-            _LearnableConstant(), x0, x1, times.squeeze(-1), times.squeeze(-1), delta=0.01
-        )
+        central_difference_lsd(_LearnableConstant(), x0, x1, times.squeeze(-1), times.squeeze(-1), delta=0.01)
+    with pytest.raises(ValueError, match="delta"):
+        central_difference_lsd(_LearnableConstant(), x0, x1, times, times, delta=0.0)
 
 
 def test_all_padding_returns_graph_connected_zero():
@@ -470,7 +552,8 @@ def test_all_padding_returns_graph_connected_zero():
     assert loss.item() == 0.0
     assert model.value.grad is not None
     assert model.value.grad.item() == 0.0
-    assert model.batch_sizes == [2, 2, 6]
+    # All rows are masked, so the fast FM-only path is sufficient.
+    assert model.batch_sizes == [2]
 
 
 def test_ot_matching_ignores_padded_target_values():

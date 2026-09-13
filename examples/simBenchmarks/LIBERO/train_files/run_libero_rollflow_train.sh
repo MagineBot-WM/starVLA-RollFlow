@@ -4,16 +4,16 @@ set -euo pipefail
 script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 repo_root="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)}"
 python_bin="${STARVLA_PYTHON:-/data/miniconda3/envs/starVLA/bin/python}"
-config_yaml="${CONFIG_YAML:-${repo_root}/examples/simBenchmarks/LIBERO/train_files/starvla_qwengroot_rollflow_libero_all.yaml}"
+config_yaml="${CONFIG_YAML:-${repo_root}/examples/simBenchmarks/LIBERO/train_files/starvla_qwengroot_rollflow_libero_h64_unfrozen.yaml}"
 data_root="${DATA_ROOT:-/data/tzq/datasets/starVLA/Datasets/libero}"
-data_mix="${DATA_MIX:-libero_all_rollflow}"
+data_mix="${DATA_MIX:-libero_all_rollflow_h64}"
 run_root="${RUN_ROOT:-/data/tzq/starVLA_checkpoints}"
-run_id="${RUN_ID:-libero_qwengroot_rollflow_h32_c8_b128_unfrozen}"
+run_id="${RUN_ID:-libero_rollflow_h64_c8_unfrozen_80k}"
 num_gpus="${NUM_GPUS:-4}"
 cuda_visible_devices="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
 main_process_port="${MAIN_PROCESS_PORT:-29501}"
-batch_per_gpu="${BATCH_PER_GPU:-16}"
-gradient_accumulation_steps="${GRADIENT_ACCUMULATION_STEPS:-2}"
+batch_per_gpu="${BATCH_PER_GPU:-32}"
+gradient_accumulation_steps="${GRADIENT_ACCUMULATION_STEPS:-1}"
 max_train_steps="${MAX_TRAIN_STEPS:-80000}"
 save_interval="${SAVE_INTERVAL:-5000}"
 eval_interval="${EVAL_INTERVAL:-1000}"
@@ -158,7 +158,6 @@ exec "${python_bin}" -m accelerate.commands.launch \
   --datasets.vla_data.data_mix "${data_mix}" \
   --datasets.vla_data.per_device_batch_size "${batch_per_gpu}" \
   --trainer.gradient_accumulation_steps "${gradient_accumulation_steps}" \
-  --trainer.freeze_modules '' \
   --trainer.max_train_steps "${max_train_steps}" \
   --trainer.save_interval "${save_interval}" \
   --trainer.eval_interval "${eval_interval}" \

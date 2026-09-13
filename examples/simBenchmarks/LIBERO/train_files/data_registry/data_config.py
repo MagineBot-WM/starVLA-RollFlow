@@ -134,6 +134,12 @@ ROBOT_TYPE_TO_EMBODIMENT_TAG = {
 # Mixtures
 # ---------------------------------------------------------------------------
 DATASET_NAMED_MIXTURES = {
+    "libero_all_rollflow_h64": [
+        ("libero_object_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h64"),
+        ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h64"),
+        ("libero_spatial_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h64"),
+        ("libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h64"),
+    ],
     "libero_all": [
         ("libero_object_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
         ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),

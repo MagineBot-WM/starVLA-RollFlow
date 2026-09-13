@@ -34,9 +34,9 @@ framework:
     # detached per-sample FM-budget gate.
     finite_difference_delta: 0.01
     p_k1: 0.7
+    # First 10K steps are instantaneous FM, then fixed 50% FM + 50% LSD.
     p_fm: 0.5
-    fm_curriculum_steps: 1000
-    w_fm: 1.0
+    fm_only_steps: 10000
     w_lsd: 0.25
     use_ot: true
     use_lsd_scaling: true

@@ -54,7 +54,7 @@ def _tiny_framework_config():
                     "num_target_vision_tokens": 2,
                     "p_k1": 0.0,
                     "p_fm": 0.0,
-                    "fm_curriculum_steps": 0,
+                    "fm_only_steps": 0,
                     "inference_steps": 2,
                     "diffusion_model_cfg": {
                         "num_attention_heads": 2,
@@ -77,8 +77,9 @@ def test_qwen_rollflow_defaults_are_explicit_and_reproducible():
     assert defaults.action_model["repeated_diffusion_steps"] == 4
     assert defaults.action_model["finite_difference_delta"] == 0.01
     assert defaults.action_model["p_k1"] == 0.7
-    assert defaults.action_model["p_fm"] == 0.3
-    assert defaults.action_model["fm_curriculum_steps"] == 5000
+    assert defaults.action_model["p_fm"] == 0.5
+    assert defaults.action_model["fm_only_steps"] == 10000
+    assert "fm_curriculum_steps" not in defaults.action_model
     assert defaults.action_model["inference_steps"] == 4
     assert defaults.action_model["use_ot"] is True
     assert defaults.action_model["diffusion_model_cfg"]["dropout"] == 0.0

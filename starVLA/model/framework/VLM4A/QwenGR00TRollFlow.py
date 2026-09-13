@@ -106,10 +106,11 @@ class QwenGR00TRollFlowDefaultConfig:
             # RollFlow objective and randomized grouped-time defaults.
             "finite_difference_delta": 0.01,
             "p_k1": 0.7,
-            "p_fm": 0.3,
-            "fm_curriculum_steps": 5000,
+            # First 10K steps are instantaneous FM, then use a fixed 50/50
+            # instantaneous-FM/LSD sampling mix.
+            "p_fm": 0.5,
+            "fm_only_steps": 10_000,
             "inference_steps": 4,
-            "w_fm": 1.0,
             "w_lsd": 0.1,
             "use_ot": True,
             "use_lsd_gate": True,

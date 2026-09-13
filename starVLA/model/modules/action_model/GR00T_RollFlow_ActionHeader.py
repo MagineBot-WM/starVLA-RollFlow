@@ -51,9 +51,8 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         finite_difference_delta: float = 0.01,
         inference_steps: Optional[int] = None,
         p_k1: float = 0.7,
-        p_fm: float = 0.3,
-        fm_curriculum_steps: int = 5000,
-        w_fm: float = 1.0,
+        p_fm: float = 0.5,
+        fm_only_steps: int = 10_000,
         w_lsd: float = 0.1,
         use_ot: bool = True,
         use_lsd_scaling: bool = True,
@@ -80,8 +79,7 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         self.inference_steps = inference_steps
         self.p_k1 = p_k1
         self.p_fm = p_fm
-        self.fm_curriculum_steps = fm_curriculum_steps
-        self.w_fm = w_fm
+        self.fm_only_steps = fm_only_steps
         self.w_lsd = w_lsd
         self.use_ot = use_ot
         self.use_lsd_scaling = use_lsd_scaling
@@ -170,11 +168,10 @@ class RollFlowActionHead(nn.Module):
                     ("inference_steps", "num_inference_timesteps"),
                 ),
                 p_k1=float(_first_config_value(config, ("p_k1",), 0.7)),
-                p_fm=float(_first_config_value(config, ("p_fm",), 0.3)),
-                fm_curriculum_steps=int(
-                    _first_config_value(config, ("fm_curriculum_steps",), 5000)
+                p_fm=float(_first_config_value(config, ("p_fm",), 0.5)),
+                fm_only_steps=int(
+                    _first_config_value(config, ("fm_only_steps",), 10_000)
                 ),
-                w_fm=float(_first_config_value(config, ("w_fm",), 1.0)),
                 w_lsd=float(_first_config_value(config, ("w_lsd",), 0.1)),
                 use_ot=bool(_first_config_value(config, ("use_ot",), True)),
                 use_lsd_scaling=bool(

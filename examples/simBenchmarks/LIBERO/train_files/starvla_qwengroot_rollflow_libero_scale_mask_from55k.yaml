@@ -29,7 +29,6 @@ framework:
     p_fm: 0.3
     fm_curriculum_steps: 5000
     inference_steps: 4
-    w_fm: 1.0
     w_lsd: 0.25
     use_ot: true
     # Current proposed objective: scaled LSD plus detached FM-budget mask.

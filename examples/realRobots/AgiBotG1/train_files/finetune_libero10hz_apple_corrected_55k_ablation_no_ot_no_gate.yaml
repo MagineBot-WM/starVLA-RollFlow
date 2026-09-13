@@ -31,7 +31,6 @@ framework:
     p_fm: 0.5
     fm_curriculum_steps: 500
     inference_steps: 4
-    w_fm: 1.0
     w_lsd: 0.1
     use_ot: false
     use_lsd_gate: false

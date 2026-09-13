@@ -171,6 +171,7 @@ def _read_log_rows(run_info: dict[str, Any], metadata: dict[str, Any], max_step:
         }
         for name in (
             "use_ot",
+            "loss",
             "fm_loss",
             "fm_loss_active",
             "lsd_loss",
@@ -303,6 +304,16 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    # Keep the figure typography consistent with the paper layout.  The
+    # fallback names cover environments where Microsoft fonts are unavailable.
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "Times", "Liberation Serif", "DejaVu Serif"],
+            "axes.unicode_minus": False,
+        }
+    )
+
     order: list[str] = []
     by_run: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
@@ -322,7 +333,7 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
     )
 
     fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.4), sharex=True, constrained_layout=False)
-    ax_fm, ax_raw, ax_gate, ax_ratio = axes.flat
+    ax_fm, ax_pressure, ax_gate, ax_total = axes.flat
     legend_handles = []
     for run in order:
         group = sorted(by_run[run], key=lambda row: row["step"])
@@ -330,7 +341,7 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         color, line_style, linewidth, label = _run_style(run, original_label)
         x = [row["step"] for row in group]
         fm = [row.get("fm_loss", math.nan) for row in group]
-        raw = [row.get("lsd_loss_raw", math.nan) for row in group]
+        total = [row.get("loss", math.nan) for row in group]
         reject = [
             100.0 * row.get("lsd_gate_active", math.nan)
             if math.isfinite(row.get("lsd_gate_active", math.nan))
@@ -338,29 +349,39 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
             for row in group
         ]
         ratio = [row.get("lsd_over_budget", math.nan) for row in group]
-        # FM is smoothed for readability. Raw LSD and pressure remain unsmoothed
-        # in a faint trace, with a thicker causal trend overlaid.
+        # FM and total loss are smoothed for readability. Raw LSD pressure is
+        # shown as a faint trace, with a thicker causal trend overlaid.
         line, = ax_fm.plot(x, _moving_average(fm, window), color=color, lw=linewidth, ls=line_style, label=label)
         legend_handles.append(line)
-        ax_raw.plot(x, raw, color=color, lw=0.8, ls=line_style, alpha=0.22)
-        ax_raw.plot(x, _moving_average(raw, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
+        pressure_trend = _moving_average(ratio, window)
+        ax_pressure.fill_between(
+            x,
+            [1.0] * len(x),
+            pressure_trend,
+            where=[math.isfinite(value) and value > 1.0 for value in pressure_trend],
+            color="#d62728",
+            alpha=0.12,
+            interpolate=True,
+            linewidth=0,
+        )
+        ax_pressure.plot(x, ratio, color=color, lw=0.8, ls=line_style, alpha=0.22)
+        ax_pressure.plot(x, pressure_trend, color=color, lw=linewidth, ls=line_style, alpha=0.95)
         ax_gate.plot(x, reject, color=color, lw=linewidth, ls=line_style)
-        ax_ratio.plot(x, ratio, color=color, lw=0.8, ls=line_style, alpha=0.22)
-        ax_ratio.plot(x, _moving_average(ratio, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
+        ax_total.plot(x, total, color=color, lw=0.8, ls=line_style, alpha=0.22)
+        ax_total.plot(x, _moving_average(total, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
 
-    ax_fm.set_title("A  FM objective", loc="left", fontweight="bold")
+    ax_fm.set_title("a  FM objective", loc="left", fontweight="bold")
     ax_fm.set_ylabel("FM velocity MSE")
-    ax_raw.set_title("B  Raw LSD magnitude", loc="left", fontweight="bold")
-    ax_raw.set_ylabel("LSD loss (pre-gate)")
-    ax_raw.set_yscale("log")
-    ax_gate.set_title("C  Gate behavior", loc="left", fontweight="bold")
-    ax_gate.set_ylabel("rejection among active samples (%)")
+    ax_pressure.set_title("b  LSD pressure / budget", loc="left", fontweight="bold")
+    ax_pressure.set_ylabel("raw LSD / budget")
+    ax_pressure.set_yscale("log")
+    ax_gate.set_title("c  LSD gate rejection", loc="left", fontweight="bold")
+    ax_gate.set_ylabel("rejected active samples (%)")
     ax_gate.set_ylim(-2.0, 102.0)
     ax_gate.set_yticks([0, 25, 50, 75, 100])
-    ax_ratio.set_title("D  LSD / budget", loc="left", fontweight="bold")
-    ax_ratio.set_ylabel("raw LSD / budget")
-    ax_ratio.set_yscale("log")
-    ax_ratio.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
+    ax_pressure.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
+    ax_total.set_title("d  total RollFlow loss", loc="left", fontweight="bold")
+    ax_total.set_ylabel("total loss")
     for axis in axes.flat:
         axis.grid(True, alpha=0.22, linewidth=0.7)
         axis.set_xlabel("training step")
@@ -408,12 +429,14 @@ def _write_manifest(
     corrected["smoothing"] = {
         "fm": f"causal moving average, window={window}",
         "lsd_raw": "none (spikes are stability evidence)",
+        "total_loss": f"causal moving average, window={window}",
         "lsd_accepted": "none",
     }
     corrected["metric"] = {
         "fm": "fm_loss",
         "fm_active": "fm_loss_active",
         "lsd_raw": "lsd_loss_raw (pre-gate, includes 2*delta scaling when enabled)",
+        "total_loss": "loss (RollFlow total objective)",
         "lsd_accepted": "lsd_loss (post-gate contribution)",
         "gate_rejection": "lsd_gate_active (active-sample rejection fraction)",
         "pressure_ratio": "lsd_loss_raw / (w_lsd * fm_loss_active); global proxy for sample-wise gate",
@@ -517,7 +540,7 @@ def _write_report(
             "",
             scope_line,
             "",
-            "Panel A is the training FM objective. Panels B and D expose the raw LSD pressure before the gate; Panel C shows how many active samples are rejected (an intervention signal, not a quantity to minimize blindly). The faint traces are individual log values and the thick traces are causal moving averages. The two `−S−G` controls are explicitly marked because both show FM rebound after their minimum.",
+            "Panel A is the training FM objective. Panel B normalizes raw LSD by its detached FM budget; the red region is above the budget threshold of one. Panel C shows how many active samples are rejected, and Panel D shows the total RollFlow objective. Faint traces are individual log values and thick traces are causal moving averages.",
             "",
             "## Observed window",
             "",
@@ -529,7 +552,7 @@ def _write_report(
             "",
             "## Interpretation",
             "",
-            "In this matched historical window, scaling keeps the global raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; the gate then rejects the offending sample updates. Removing both protections produces the two observed unstable controls (OT and no-OT), where FM first improves and then rebounds.",
+            "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the two observed unstable controls (OT and no-OT), where both FM and total loss first improve and then rebound.",
             "",
             "Both available scaling-only `+S−G` controls (OT and no-OT) remain stable in this window, so the observed rebound is not attributable to OT alone. The gate is not always active once scaling is present.",
             "",

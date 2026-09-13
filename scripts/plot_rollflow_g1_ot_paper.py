@@ -143,8 +143,9 @@ def _parse_log_dict(text: str, start: int) -> tuple[dict[str, Any] | None, int]:
 
 def _read_log_rows(run_info: dict[str, Any], metadata: dict[str, Any], max_step: int | None) -> list[dict[str, Any]]:
     """Extract G1 metrics directly from the source log when available."""
-    path = Path(run_info.get("log", ""))
-    if not path.exists():
+    log_name = run_info.get("log")
+    path = Path(log_name) if log_name else Path()
+    if not path.is_file():
         return []
     text = _strip_ansi(path.read_text(errors="ignore"))
     rows: list[dict[str, Any]] = []
@@ -228,6 +229,39 @@ def _load_rows(manifest: dict[str, Any], max_step: int | None) -> tuple[list[dic
     return rows, metadata
 
 
+def _run_label(run: str, label: str) -> str:
+    """Use a compact, factorized label that is readable in one legend."""
+    no_ot = "no_ot" in run or "no OT" in label
+    no_scaling = "no_scaling" in run or "w/o scaling" in label
+    no_gate = "no_gate" in run or "no mask" in label
+    factors = ("−S" if no_scaling else "+S") + ("−G" if no_gate else "+G")
+    collapsed = no_scaling and no_gate
+    return f"{'no-OT' if no_ot else 'OT'} · {factors}" + (" · collapse" if collapsed else "")
+
+
+def _run_style(run: str, label: str) -> tuple[str, str, float, str]:
+    """Stable color/style identity independent of manifest ordering."""
+    no_ot = "no_ot" in run or "no OT" in label
+    no_scaling = "no_scaling" in run or "w/o scaling" in label
+    no_gate = "no_gate" in run or "no mask" in label
+    # Removing both protections is the collapse control even when an older
+    # manifest did not include the parenthetical "(collapsed)" label.
+    collapsed = no_scaling and no_gate
+    if collapsed and no_ot:
+        return "#7b2cbf", "--", 2.4, "no-OT · −S−G · collapse"
+    if collapsed:
+        return "#d55e00", "-", 2.4, "OT · −S−G · collapse"
+    if no_scaling:
+        return "#e69f00", "-", 2.0, "OT · −S+G"
+    if no_gate:
+        return "#0072b2", "-", 1.9, "OT · +S−G"
+    return "#009e73", "-", 2.5, "OT · +S+G (full)"
+
+
+def _finite_values(group: list[dict[str, Any]], key: str) -> list[float]:
+    return [row[key] for row in group if math.isfinite(row.get(key, math.nan))]
+
+
 def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: Path, window: int) -> None:
     import matplotlib
 
@@ -243,72 +277,114 @@ def _plot(rows: list[dict[str, Any]], metadata: dict[str, dict[str, Any]], out: 
             by_run[run] = []
         by_run[run].append(row)
 
-    colors = ["#188977", "#3f73b8", "#d77b9b", "#d9822b", "#6f42c1"]
-    fig, axes = plt.subplots(2, 2, figsize=(13, 8.2), sharex=True, constrained_layout=False)
+    fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.4), sharex=True, constrained_layout=False)
     ax_fm, ax_raw, ax_gate, ax_ratio = axes.flat
+    legend_handles = []
     for index, run in enumerate(order):
         group = sorted(by_run[run], key=lambda row: row["step"])
-        label = group[0]["label"]
-        color = colors[index % len(colors)]
-        is_no_ot = "no_ot" in run or "no OT" in label
-        line_style = "--" if is_no_ot else "-"
+        original_label = group[0]["label"]
+        color, line_style, linewidth, label = _run_style(run, original_label)
         x = [row["step"] for row in group]
         fm = [row.get("fm_loss", math.nan) for row in group]
         raw = [row.get("lsd_loss_raw", math.nan) for row in group]
         accepted = [row.get("lsd_loss", math.nan) for row in group]
         reject = [row.get("lsd_gate_active", math.nan) for row in group]
         ratio = [row.get("lsd_over_fm", math.nan) for row in group]
-        # FM is smoothed for readability.  Raw LSD is deliberately not
-        # smoothed: spikes are the instability signal this figure is for.
-        ax_fm.plot(x, _moving_average(fm, window), color=color, lw=2, ls=line_style, label=label)
-        ax_raw.plot(x, raw, color=color, lw=1.25, ls=line_style, alpha=0.45)
-        ax_raw.plot(x, _moving_average(raw, window), color=color, lw=2, ls=line_style, label=label)
-        ax_raw.plot(x, accepted, color=color, lw=1, ls=":" if is_no_ot else "--", alpha=0.65)
-        ax_gate.plot(x, reject, color=color, lw=1.8, ls=line_style, label=label)
-        ax_ratio.plot(x, ratio, color=color, lw=1.25, ls=line_style, alpha=0.45)
-        ax_ratio.plot(x, _moving_average(ratio, window), color=color, lw=2, ls=line_style, label=label)
+        # FM is smoothed for readability. Raw LSD and pressure remain unsmoothed
+        # in a faint trace, with a thicker causal trend overlaid.
+        line, = ax_fm.plot(x, _moving_average(fm, window), color=color, lw=linewidth, ls=line_style, label=label)
+        legend_handles.append(line)
+        ax_raw.plot(x, raw, color=color, lw=0.8, ls=line_style, alpha=0.22)
+        ax_raw.plot(x, _moving_average(raw, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
+        # The accepted curve is only visually useful when the gate actually
+        # rejects samples; draw it as a thin dotted companion to raw LSD.
+        if any(value > 0 for value in reject if math.isfinite(value)):
+            ax_raw.plot(x, accepted, color=color, lw=1.0, ls=":", alpha=0.9)
+        ax_gate.plot(x, reject, color=color, lw=linewidth, ls=line_style)
+        ax_ratio.plot(x, ratio, color=color, lw=0.8, ls=line_style, alpha=0.22)
+        ax_ratio.plot(x, _moving_average(ratio, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
 
-    ax_fm.set_title("FM objective (causal MA)")
-    ax_fm.set_ylabel("MSE")
-    ax_raw.set_title("LSD pressure: raw vs accepted")
-    ax_raw.set_ylabel("LSD loss")
-    ax_raw.set_yscale("symlog", linthresh=1e-4)
-    ax_raw.set_ylim(bottom=0)
-    ax_raw.text(0.01, 0.03, "solid = raw pre-gate\ndash = accepted post-gate", transform=ax_raw.transAxes, fontsize=9)
-    ax_gate.set_title("Gate rejection rate")
-    ax_gate.set_ylabel("rejected active samples")
+        # Make the two collapse claims explicit on the FM panel. The annotation
+        # is derived from the observed minimum rather than a hard-coded step.
+        no_scaling = "no_scaling" in run or "w/o scaling" in original_label
+        no_gate = "no_gate" in run or "no mask" in original_label
+        if no_scaling and no_gate and _finite_values(group, "fm_loss"):
+            finite_fm = [(row["step"], row["fm_loss"]) for row in group if math.isfinite(row.get("fm_loss", math.nan))]
+            min_step, min_fm = min(finite_fm, key=lambda item: item[1])
+            no_ot = "no_ot" in run or "no OT" in original_label
+            text_x = min_step + (210 if no_ot else 95)
+            text_y = min_fm + (0.07 if no_ot else 0.18)
+            ax_fm.annotate(
+                f"rebound ({'no-OT' if no_ot else 'OT'})",
+                xy=(min_step, min_fm),
+                xytext=(text_x, text_y),
+                color=color,
+                fontsize=9,
+                arrowprops={"arrowstyle": "->", "color": color, "lw": 1.0},
+            )
+
+    ax_fm.set_title("A  FM objective", loc="left", fontweight="bold")
+    ax_fm.set_ylabel("FM velocity MSE")
+    ax_raw.set_title("B  Raw LSD magnitude", loc="left", fontweight="bold")
+    ax_raw.set_ylabel("LSD loss (pre-gate)")
+    ax_raw.set_yscale("log")
+    ax_raw.text(0.02, 0.95, "faint = individual logs\nthick = causal trend\ndotted = accepted (when gated)", transform=ax_raw.transAxes, va="top", fontsize=8.5)
+    ax_gate.set_title("C  Gate behavior", loc="left", fontweight="bold")
+    ax_gate.set_ylabel("rejection fraction (0–1)")
     ax_gate.set_ylim(-0.03, 1.03)
-    ax_ratio.set_title("Raw LSD / FM pressure")
-    ax_ratio.set_ylabel("ratio")
-    ax_ratio.set_yscale("symlog", linthresh=1e-3)
-    ax_ratio.set_ylim(bottom=0)
-    ax_ratio.axhline(0.1, color="black", lw=1, ls=":", alpha=0.6, label="w_lsd budget = 0.1")
+    ax_ratio.set_title("D  LSD pressure relative to FM", loc="left", fontweight="bold")
+    ax_ratio.set_ylabel("raw LSD / FM")
+    ax_ratio.set_yscale("log")
+    ax_ratio.axhline(0.1, color="#555555", lw=1, ls=":", alpha=0.8)
+    ax_ratio.text(0.02, 0.95, "dotted reference = w_lsd budget (0.1)", transform=ax_ratio.transAxes, va="top", fontsize=8.5)
     for axis in axes.flat:
-        axis.grid(True, alpha=0.2)
+        axis.grid(True, alpha=0.22, linewidth=0.7)
         axis.set_xlabel("training step")
-    ax_fm.legend(loc="upper right", fontsize=8, frameon=True)
-    ax_raw.legend(loc="upper right", fontsize=8, frameon=True)
-    ax_gate.legend(loc="upper right", fontsize=8, frameon=True)
-    ax_ratio.legend(loc="upper right", fontsize=8, frameon=True)
 
     initializations = sorted({info["initialization"] for info in metadata.values()})
     caveat = "; ".join(initializations)
     scope = "OT only" if all(not ("no_ot" in run) for run in order) else "OT and no-OT controls"
     fig.suptitle(
-        f"RollFlow G1 ({scope}): scaling/mask stability ablation\n"
-        f"{caveat} — raw LSD is required to diagnose collapse",
-        fontsize=14,
+        f"RollFlow stability ablation on G1 ({scope})",
+        fontsize=16,
+        fontweight="bold",
     )
     fig.text(
         0.5,
-        0.015,
-        "The selected historical runs are 55K-pretrained fine-tunes, not scratch self-bootstrap. "
-        "This plot establishes raw-gradient pressure, not a scratch-collapse claim.",
+        0.925,
+        "S = central-difference scaling (2δ)   ·   G = sample-wise LSD gate   ·   lower FM/pressure is better",
         ha="center",
-        fontsize=9,
-        color="#555555",
+        fontsize=10,
+        color="#444444",
     )
-    fig.subplots_adjust(top=0.86, bottom=0.10, left=0.07, right=0.98, hspace=0.28, wspace=0.22)
+    fig.legend(
+        legend_handles,
+        [handle.get_label() for handle in legend_handles],
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.895),
+        ncol=3,
+        fontsize=9.5,
+        frameon=False,
+        columnspacing=1.4,
+        handlelength=2.6,
+    )
+    fig.text(
+        0.5,
+        0.035,
+        f"Matched historical window: {caveat}; FM = causal moving average (window={window}); raw LSD is unsmoothed.",
+        ha="center",
+        fontsize=9.0,
+        color="#444444",
+    )
+    fig.text(
+        0.5,
+        0.012,
+        "Both −S−G controls show FM rebound. This is a training-loss stability diagnostic, not a closed-loop success evaluation.",
+        ha="center",
+        fontsize=9.0,
+        color="#444444",
+    )
+    fig.subplots_adjust(top=0.80, bottom=0.125, left=0.075, right=0.985, hspace=0.28, wspace=0.22)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220)
     fig.savefig(out.with_suffix(".pdf"))
@@ -323,6 +399,7 @@ def _write_manifest(
     window: int,
     max_step: int | None,
     destination: Path | None = None,
+    report: Path | None = None,
 ) -> Path:
     corrected = dict(manifest)
     corrected["rows"] = str(Path(manifest.get("rows", DEFAULT_MANIFEST.with_name("g1_ot_loss_rows.csv"))))
@@ -355,9 +432,101 @@ def _write_manifest(
         "pdf": str(out.with_suffix(".pdf")),
         "records": len(rows),
     }
+    if report is not None:
+        corrected["outputs"]["report"] = str(report)
     out_manifest = destination or out.with_name("g1_ot_loss_manifest_corrected.json")
     out_manifest.write_text(json.dumps(corrected, indent=2, ensure_ascii=False) + "\n")
     return out_manifest
+
+
+def _write_report(
+    rows: list[dict[str, Any]],
+    metadata: dict[str, dict[str, Any]],
+    manifest: dict[str, Any],
+    figure: Path,
+    destination: Path,
+) -> Path:
+    """Write a short, reviewer-facing interpretation next to the figure."""
+    by_run: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_run.setdefault(row["run"], []).append(row)
+
+    def fmt(value: float) -> str:
+        return "—" if not math.isfinite(value) else f"{value:.3g}"
+
+    table: list[str] = []
+    for run_info in manifest["runs"]:
+        run = run_info["run"]
+        group = sorted(by_run.get(run, []), key=lambda row: row["step"])
+        if not group:
+            continue
+        fm = _finite_values(group, "fm_loss")
+        pressure = _finite_values(group, "lsd_over_fm")
+        rejection = _finite_values(group, "lsd_gate_active")
+        min_fm = min(fm) if fm else math.nan
+        min_step = next(
+            (row["step"] for row in group if row.get("fm_loss") == min_fm),
+            math.nan,
+        )
+        table.append(
+            "| "
+            + " | ".join(
+                (
+                    _run_label(run, run_info["label"]),
+                    "no" if ("no_ot" in run or "no OT" in run_info["label"]) else "yes",
+                    "on" if metadata[run]["use_lsd_scaling"] else "off",
+                    "on" if metadata[run]["use_lsd_gate"] else "off",
+                    fmt(min_fm),
+                    str(int(min_step)) if math.isfinite(min_step) else "—",
+                    fmt(group[-1].get("fm_loss", math.nan)),
+                    fmt(max(pressure) if pressure else math.nan),
+                    fmt(max(rejection) if rejection else math.nan),
+                )
+            )
+            + " |"
+        )
+
+    limitations = [
+        "The selected runs start from the same H32 55K checkpoint; they are fine-tunes, not scratch self-bootstrap runs.",
+        "The figure uses training losses. It does not replace held-out or closed-loop trajectory evaluation.",
+        "A post-gate LSD curve can be zero because the gate rejected the update; raw LSD and rejection rate are therefore shown separately.",
+    ]
+    figure_name = figure.name
+    text = "\n".join(
+        [
+            "# RollFlow G1 stability ablation",
+            "",
+            "## Reading the figure",
+            "",
+            f"The figure (`{figure_name}`) separates the two safety mechanisms that are easy to conflate:",
+            "",
+            "- **S (scaling)** multiplies the central-difference LSD metric by `2δ`, controlling its gradient magnitude.",
+            "- **G (gate/mask)** rejects non-finite or over-budget per-sample LSD updates.",
+            "- **OT** denotes optimal-transport matching of noise to target trajectories.",
+            "",
+            "Panel A is the training FM objective. Panels B and D expose the raw LSD pressure before the gate; Panel C shows how many active samples are rejected (an intervention signal, not a quantity to minimize blindly). The faint traces are individual log values and the thick traces are causal moving averages. The two `−S−G` controls are explicitly marked because both show FM rebound after their minimum.",
+            "",
+            "## Observed window",
+            "",
+            "| run | OT | S | G | min FM | min step | final FM | peak raw LSD/FM | peak rejection |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            *table,
+            "",
+            "## Interpretation",
+            "",
+            "In this matched historical window, scaling keeps raw LSD pressure near the FM scale. Removing scaling makes the raw pressure exceed the `w_lsd=0.1` budget; the gate then rejects the offending updates. Removing both protections produces the two observed collapse controls (OT and no-OT), where FM first improves and then rebounds.",
+            "",
+            "The stable `OT · +S−G` control shows that the gate is not always active once scaling is present. It does **not** establish that removing the gate is safe from scratch; a factorial scratch ablation is required for that claim.",
+            "",
+            "## Scope and limitations",
+            "",
+            *[f"- {item}" for item in limitations],
+            "",
+        ]
+    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(text)
+    return destination
 
 
 def main() -> None:
@@ -368,9 +537,10 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/g1_ot_paper/g1_ot_stability_corrected_0_2000.png"),
+        default=Path("/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/g1_ot_paper/g1_ot_stability_paper_0_2000.png"),
     )
     parser.add_argument("--manifest-output", type=Path, default=None)
+    parser.add_argument("--report-output", type=Path, default=None)
     args = parser.parse_args()
     if args.window <= 0:
         parser.error("--window must be positive")
@@ -380,12 +550,22 @@ def main() -> None:
         max_step = manifest.get("filter", {}).get("max_step")
     rows, metadata = _load_rows(manifest, max_step)
     _plot(rows, metadata, args.output, args.window)
+    report_output = args.report_output or args.output.with_suffix(".md")
     manifest_output = _write_manifest(
-        manifest, rows, metadata, args.output, args.window, max_step, args.manifest_output
+        manifest,
+        rows,
+        metadata,
+        args.output,
+        args.window,
+        max_step,
+        args.manifest_output,
+        report_output,
     )
+    report_output = _write_report(rows, metadata, manifest, args.output, report_output)
     print(f"wrote {args.output}")
     print(f"wrote {args.output.with_suffix('.pdf')}")
     print(f"wrote {manifest_output}")
+    print(f"wrote {report_output}")
 
 
 if __name__ == "__main__":

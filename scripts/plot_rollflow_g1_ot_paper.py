@@ -552,7 +552,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/g1_ot_paper/g1_stability_all_paper_0_2500.png"),
+        default=Path("/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/g1_ot_paper/g1_stability_all_clean_0_2500.png"),
     )
     parser.add_argument("--manifest-output", type=Path, default=None)
     parser.add_argument("--report-output", type=Path, default=None)

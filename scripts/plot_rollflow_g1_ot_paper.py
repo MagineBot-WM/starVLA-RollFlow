@@ -459,19 +459,19 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
 
     fig.suptitle("RollFlow G1 stability", fontsize=18, fontweight="bold", y=0.98)
     # Keep the four mechanism keys with the stability panels instead of
-    # reserving a separate banner above the figure.  Panel C has open middle
-    # space, so a single-row legend does not obscure any traces.
+    # reserving a separate banner above the figure.  Panel C has open space on
+    # the right, so a compact 4-by-1 legend does not obscure the early spikes.
     ax_gate.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
-        loc="center",
-        bbox_to_anchor=(0.68, 0.52),
-        ncol=4,
-        fontsize=9.0,
+        loc="center right",
+        bbox_to_anchor=(0.98, 0.52),
+        ncol=1,
+        fontsize=11.5,
         frameon=False,
-        columnspacing=0.35,
-        handlelength=1.0,
-        handletextpad=0.3,
+        labelspacing=0.55,
+        handlelength=2.0,
+        handletextpad=0.45,
     )
     if total_show_ot:
         ax_total.legend(

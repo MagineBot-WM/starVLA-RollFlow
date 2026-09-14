@@ -282,12 +282,12 @@ def _run_style(run: str, label: str, *, show_ot: bool = False) -> tuple[str, str
     line_style = "--" if no_ot else "-"
     if collapsed:
         color = "#7b2cbf" if no_ot else "#d55e00"
-        return color, line_style, 2.4, prefix + "unstable (−S−G)"
+        return color, line_style, 2.4, prefix + "−S−G"
     if no_scaling:
-        return "#e69f00", line_style, 2.0, prefix + "gate only (−S+G)"
+        return "#e69f00", line_style, 2.0, prefix + "−S+G"
     if no_gate:
-        return "#0072b2", line_style, 1.9, prefix + "scaling only (+S−G)"
-    return "#009e73", line_style, 2.5, prefix + "full (+S+G)"
+        return "#0072b2", line_style, 1.9, prefix + "+S−G"
+    return "#009e73", line_style, 2.5, prefix + "+S+G"
 
 
 def _finite_values(group: list[dict[str, Any]], key: str) -> list[float]:
@@ -457,7 +457,7 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
     for axis in (ax_gate, ax_total):
         axis.set_xlabel("training step")
 
-    fig.suptitle("RollFlow G1 stability ablation", fontsize=18, fontweight="bold", y=0.98)
+    fig.suptitle("RollFlow G1 stability", fontsize=18, fontweight="bold", y=0.98)
     fig.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],

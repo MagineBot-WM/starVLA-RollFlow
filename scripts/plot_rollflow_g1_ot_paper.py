@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Plot the fixed-OT G1 scaling/mask ablation without hiding LSD instability.
+"""Plot the G1 RollFlow stability ablation and an optional OT comparison.
 
 The old plot used only ``lsd_loss`` (the post-gate contribution).  That is
 misleading for a stability analysis: an enabled gate can turn an exploding
 ``lsd_loss_raw`` into an apparently perfect zero.  This script keeps both
 quantities and records the provenance of every run (in particular whether it
-starts from a checkpoint).
+starts from a checkpoint).  A manifest may reserve panels A--C for the
+scaling/gate ablation and panel D for a matched OT-on/OT-off total-loss pair.
 
 Example
 -------
@@ -302,7 +303,35 @@ def _value_at_or_before(group: list[dict[str, Any]], key: str, step: int) -> flo
     return candidates[-1][key] if candidates else math.nan
 
 
-def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
+def _panel_runs(manifest: dict[str, Any], order: list[str]) -> tuple[list[str], list[str]]:
+    """Return the runs used by panels A--C and D.
+
+    The ordinary stability manifest has no panel declaration, so every run is
+    used everywhere (the historical behaviour).  An OT comparison manifest
+    can instead reserve the first three panels for the scaling/gate ablation
+    and panel D for a matched OT/no-OT pair.
+    """
+    panels = manifest.get("panels")
+    if not panels:
+        return order, order
+
+    def select(name: str, fallback: list[str]) -> list[str]:
+        requested = panels.get(name)
+        if requested is None:
+            return fallback
+        requested_set = set(requested)
+        return [run for run in order if run in requested_set]
+
+    stability = select("stability", order)
+    total = select("total", order)
+    if not stability:
+        raise ValueError("panel 'stability' must select at least one run")
+    if not total:
+        raise ValueError("panel 'total' must select at least one run")
+    return stability, total
+
+
+def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, window: int) -> None:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -345,20 +374,15 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
     # shrink an otherwise full-page figure and make its labels unreadable.
     fig, axes = plt.subplots(2, 2, figsize=(7.0, 5.2), sharex=True, constrained_layout=False)
     ax_fm, ax_pressure, ax_gate, ax_total = axes.flat
-    show_ot = (
-        any(_is_no_ot(row["run"], row["label"]) for row in rows)
-        and any(not _is_no_ot(row["run"], row["label"]) for row in rows)
-    )
-    legend_handles = []
-    for run in order:
+    stability_runs, total_runs = _panel_runs(manifest, order)
+    split_panels = bool(manifest.get("panels"))
+    stability_handles = []
+    for run in stability_runs:
         group = sorted(by_run[run], key=lambda row: row["step"])
         original_label = group[0]["label"]
-        color, line_style, linewidth, label = _run_style(
-            run, original_label, show_ot=show_ot
-        )
+        color, line_style, linewidth, label = _run_style(run, original_label)
         x = [row["step"] for row in group]
         fm = [row.get("fm_loss", math.nan) for row in group]
-        total = [row.get("loss", math.nan) for row in group]
         reject = [
             100.0 * row.get("lsd_gate_active", math.nan)
             if math.isfinite(row.get("lsd_gate_active", math.nan))
@@ -369,7 +393,7 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         # FM and total loss are smoothed for readability. Raw LSD pressure is
         # shown as a faint trace, with a thicker causal trend overlaid.
         line, = ax_fm.plot(x, _moving_average(fm, window), color=color, lw=linewidth, ls=line_style, label=label)
-        legend_handles.append(line)
+        stability_handles.append(line)
         pressure_trend = _moving_average(ratio, window)
         ax_pressure.fill_between(
             x,
@@ -384,8 +408,35 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         ax_pressure.plot(x, ratio, color=color, lw=0.8, ls=line_style, alpha=0.22)
         ax_pressure.plot(x, pressure_trend, color=color, lw=linewidth, ls=line_style, alpha=0.95)
         ax_gate.plot(x, reject, color=color, lw=linewidth, ls=line_style)
+
+    total_handles = []
+    total_show_ot = split_panels and len(total_runs) > 1 and any(
+        _is_no_ot(run, by_run[run][0]["label"]) for run in total_runs
+    ) and any(not _is_no_ot(run, by_run[run][0]["label"]) for run in total_runs)
+    for run in total_runs:
+        group = sorted(by_run[run], key=lambda row: row["step"])
+        original_label = group[0]["label"]
+        if total_show_ot:
+            no_ot = _is_no_ot(run, original_label)
+            color = "#d55e00" if no_ot else "#009e73"
+            line_style = "--" if no_ot else "-"
+            linewidth = 2.3
+            label = "OT off" if no_ot else "OT on"
+        else:
+            color, line_style, linewidth, label = _run_style(run, original_label)
+        x = [row["step"] for row in group]
+        total = [row.get("loss", math.nan) for row in group]
+        line, = ax_total.plot(
+            x,
+            _moving_average(total, window),
+            color=color,
+            lw=linewidth,
+            ls=line_style,
+            label=label,
+        )
         ax_total.plot(x, total, color=color, lw=0.8, ls=line_style, alpha=0.22)
-        ax_total.plot(x, _moving_average(total, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
+        if total_show_ot:
+            total_handles.append(line)
 
     ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=14)
     ax_fm.set_ylabel("FM loss (MSE)")
@@ -397,7 +448,8 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
     ax_gate.set_ylim(-2.0, 102.0)
     ax_gate.set_yticks([0, 25, 50, 75, 100])
     ax_pressure.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
-    ax_total.set_title("(d) total RollFlow loss", loc="left", fontweight="bold", fontsize=14)
+    total_title = "(d) total loss: OT comparison" if total_show_ot else "(d) total RollFlow loss"
+    ax_total.set_title(total_title, loc="left", fontweight="bold", fontsize=14)
     ax_total.set_ylabel("total loss")
     for axis in axes.flat:
         axis.grid(True, alpha=0.22, linewidth=0.7)
@@ -407,16 +459,25 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
 
     fig.suptitle("RollFlow G1 stability ablation", fontsize=18, fontweight="bold", y=0.98)
     fig.legend(
-        legend_handles,
-        [handle.get_label() for handle in legend_handles],
+        stability_handles,
+        [handle.get_label() for handle in stability_handles],
         loc="upper center",
         bbox_to_anchor=(0.5, 0.91),
-        ncol=3 if show_ot else 2,
+        ncol=2,
         fontsize=11.5,
         frameon=False,
-        columnspacing=0.9 if show_ot else 1.4,
+        columnspacing=1.4,
         handlelength=2.2,
     )
+    if total_show_ot:
+        ax_total.legend(
+            total_handles,
+            [handle.get_label() for handle in total_handles],
+            loc="upper right",
+            fontsize=11.5,
+            frameon=False,
+            handlelength=2.2,
+        )
     fig.subplots_adjust(top=0.74, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=300)
@@ -499,6 +560,8 @@ def _write_report(
         any(_is_no_ot(run, group[0]["label"]) for run, group in by_run.items())
         and any(not _is_no_ot(run, group[0]["label"]) for run, group in by_run.items())
     )
+    order = [item["run"] for item in manifest["runs"] if item["run"] in by_run]
+    _, total_runs = _panel_runs(manifest, order)
 
     def fmt(value: float) -> str:
         return "—" if not math.isfinite(value) else f"{value:.3g}"
@@ -563,10 +626,14 @@ def _write_report(
         "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the unstable control, where both FM and total loss first improve and then rebound.",
         "The scaling-only `+S−G` control remains stable in this window, while the gate is not always active once scaling is present.",
     ]
-    if show_ot:
+    if manifest.get("panels"):
+        total_labels = [
+            "OT on" if not _is_no_ot(run, by_run[run][0]["label"]) else "OT off"
+            for run in total_runs
+        ]
         interpretation = [
-            "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the unstable controls, where both FM and total loss first improve and then rebound.",
-            "The available matched OT/no-OT pairs (scaling-only and unstable) show nearly identical trends, so OT is not the dominant stability mechanism in this diagnostic. No-OT full and gate-only pairs are not included here.",
+            "Panels A–C use the four OT runs to isolate the two stability mechanisms: scaling keeps raw LSD pressure low, while the gate rejects over-budget samples. Removing both protections produces the characteristic FM and total-loss rebound.",
+            f"Panel D isolates optimal-transport matching with the matched scaling-only pair ({' vs. '.join(total_labels)}). In the common window, OT on descends earlier and with a smaller late-window spread than OT off, supporting OT as a convergence/stability aid in this setup.",
         ]
     text = "\n".join(
         [
@@ -580,7 +647,7 @@ def _write_report(
             "",
             scope_line,
             "",
-            "Panel A is the FM loss. Panel B normalizes raw LSD loss by its detached FM budget; the red region is above the budget threshold of one. Panel C shows how many active samples are rejected, and Panel D shows the total RollFlow loss. Faint traces are individual log values and thick traces are causal moving averages.",
+            "Panel A is the FM loss. Panel B normalizes raw LSD loss by its detached FM budget; the red region is above the budget threshold of one. Panel C shows how many active samples are rejected. Panel D shows total loss; in the OT comparison figure it contains only the matched OT-on/OT-off pair. Faint traces are individual log values and thick traces are causal moving averages.",
             "",
             "## Observed window",
             "",
@@ -625,7 +692,7 @@ def main() -> None:
     if max_step is None:
         max_step = manifest.get("filter", {}).get("max_step")
     rows, metadata = _load_rows(manifest, max_step)
-    _plot(rows, args.output, args.window)
+    _plot(rows, manifest, args.output, args.window)
     report_output = args.report_output or args.output.with_suffix(".md")
     manifest_output = _write_manifest(
         manifest,

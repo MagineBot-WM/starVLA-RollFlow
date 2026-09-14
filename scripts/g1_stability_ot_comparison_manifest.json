@@ -4,6 +4,18 @@
     "max_step": 2500
   },
   "rows": "/data/tzq/starVLA_checkpoints/rollflow_ablation_analysis/six_runs/all_runs.csv",
+  "panels": {
+    "stability": [
+      "libero10hz_pick_up_the_apple_ablation_ot_gate_55k_20k_v1",
+      "libero10hz_pick_up_the_apple_ablation_ot_no_gate_55k_20k_v1",
+      "libero10hz_pick_up_the_apple_ablation_ot_gate_no_scaling_55k_20k_v1",
+      "libero10hz_pick_up_the_apple_ablation_ot_no_gate_no_scaling_55k_20k_v1"
+    ],
+    "total": [
+      "libero10hz_pick_up_the_apple_ablation_ot_no_gate_55k_20k_v1",
+      "libero10hz_pick_up_the_apple_ablation_no_ot_no_gate_55k_20k_v1"
+    ]
+  },
   "runs": [
     {
       "run": "libero10hz_pick_up_the_apple_ablation_ot_gate_55k_20k_v1",

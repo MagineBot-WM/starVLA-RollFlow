@@ -466,7 +466,7 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         "ncol": 1,
         "fontsize": 11.5,
         "frameon": True,
-        "framealpha": 0.78,
+        "framealpha": 0.55,
         "facecolor": "white",
         "edgecolor": "none",
         "labelspacing": 0.55,

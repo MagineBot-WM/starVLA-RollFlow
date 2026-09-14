@@ -474,19 +474,25 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         "handletextpad": 0.45,
         "borderaxespad": 0.35,
     }
+    # A common inset anchor keeps the keys aligned while leaving clear space
+    # below each subplot title.
+    legend_anchor = (0.98, 0.90)
     ax_fm.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
+        bbox_to_anchor=legend_anchor,
         **legend_kwargs,
     )
     ax_pressure.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
+        bbox_to_anchor=legend_anchor,
         **legend_kwargs,
     )
     ax_gate.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
+        bbox_to_anchor=legend_anchor,
         **legend_kwargs,
     )
     if total_show_ot:
@@ -495,6 +501,7 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
             [handle.get_label() for handle in total_handles],
             fontsize=11.5,
             loc="upper right",
+            bbox_to_anchor=legend_anchor,
             frameon=False,
             handlelength=2.2,
             borderaxespad=0.35,
@@ -503,6 +510,7 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         ax_total.legend(
             stability_handles,
             [handle.get_label() for handle in stability_handles],
+            bbox_to_anchor=legend_anchor,
             **legend_kwargs,
         )
     fig.subplots_adjust(top=0.87, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)

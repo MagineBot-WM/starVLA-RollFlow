@@ -458,16 +458,20 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         axis.set_xlabel("training step")
 
     fig.suptitle("RollFlow G1 stability", fontsize=18, fontweight="bold", y=0.98)
-    fig.legend(
+    # Keep the four mechanism keys with the stability panels instead of
+    # reserving a separate banner above the figure.  Panel C has open middle
+    # space, so a single-row legend does not obscure any traces.
+    ax_gate.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.91),
-        ncol=2,
-        fontsize=11.5,
+        loc="center",
+        bbox_to_anchor=(0.68, 0.52),
+        ncol=4,
+        fontsize=9.0,
         frameon=False,
-        columnspacing=1.4,
-        handlelength=2.2,
+        columnspacing=0.35,
+        handlelength=1.0,
+        handletextpad=0.3,
     )
     if total_show_ot:
         ax_total.legend(
@@ -478,7 +482,7 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
             frameon=False,
             handlelength=2.2,
         )
-    fig.subplots_adjust(top=0.74, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)
+    fig.subplots_adjust(top=0.87, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=300)
     fig.savefig(out.with_suffix(".pdf"))

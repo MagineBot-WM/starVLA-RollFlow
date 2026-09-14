@@ -473,29 +473,31 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         "handlelength": 2.0,
         "handletextpad": 0.45,
     }
+    legend_anchor = (0.98, 0.70)
     ax_fm.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
-        bbox_to_anchor=(0.98, 0.70),
+        bbox_to_anchor=legend_anchor,
         **legend_kwargs,
     )
     ax_pressure.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
-        bbox_to_anchor=(0.98, 0.70),
+        bbox_to_anchor=legend_anchor,
         **legend_kwargs,
     )
     ax_gate.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
-        bbox_to_anchor=(0.98, 0.52),
+        bbox_to_anchor=legend_anchor,
         **legend_kwargs,
     )
     if total_show_ot:
         ax_total.legend(
             total_handles,
             [handle.get_label() for handle in total_handles],
-            loc="upper right",
+            loc="center right",
+            bbox_to_anchor=legend_anchor,
             fontsize=11.5,
             frameon=False,
             handlelength=2.2,
@@ -504,7 +506,7 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         ax_total.legend(
             stability_handles,
             [handle.get_label() for handle in stability_handles],
-            bbox_to_anchor=(0.98, 0.70),
+            bbox_to_anchor=legend_anchor,
             **legend_kwargs,
         )
     fig.subplots_adjust(top=0.87, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)

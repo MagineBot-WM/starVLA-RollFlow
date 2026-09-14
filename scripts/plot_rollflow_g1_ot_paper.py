@@ -379,12 +379,12 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         ax_total.plot(x, _moving_average(total, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
 
     ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=14)
-    ax_fm.set_ylabel("FM velocity MSE")
+    ax_fm.set_ylabel("FM loss (MSE)")
     ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontweight="bold", fontsize=14)
-    ax_pressure.set_ylabel("raw LSD loss / budget")
+    ax_pressure.set_ylabel("LSD / budget")
     ax_pressure.set_yscale("log")
     ax_gate.set_title("(c) LSD gate rejection", loc="left", fontweight="bold", fontsize=14)
-    ax_gate.set_ylabel("active rejects (%)")
+    ax_gate.set_ylabel("rejected (%)")
     ax_gate.set_ylim(-2.0, 102.0)
     ax_gate.set_yticks([0, 25, 50, 75, 100])
     ax_pressure.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
@@ -405,10 +405,10 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         ncol=3,
         fontsize=11.5,
         frameon=False,
-        columnspacing=1.4,
-        handlelength=2.6,
+        columnspacing=0.9,
+        handlelength=2.2,
     )
-    fig.subplots_adjust(top=0.74, bottom=0.11, left=0.105, right=0.985, hspace=0.50, wspace=0.30)
+    fig.subplots_adjust(top=0.74, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=300)
     fig.savefig(out.with_suffix(".pdf"))

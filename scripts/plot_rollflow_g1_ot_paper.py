@@ -438,18 +438,18 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         if total_show_ot:
             total_handles.append(line)
 
-    ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=14)
+    ax_fm.set_title("(a) FM loss", loc="left", fontsize=14)
     ax_fm.set_ylabel("FM loss (MSE)")
-    ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontweight="bold", fontsize=14)
+    ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontsize=14)
     ax_pressure.set_ylabel("LSD / budget")
     ax_pressure.set_yscale("log")
-    ax_gate.set_title("(c) LSD gate rejection", loc="left", fontweight="bold", fontsize=14)
+    ax_gate.set_title("(c) LSD gate rejection", loc="left", fontsize=14)
     ax_gate.set_ylabel("rejected (%)")
     ax_gate.set_ylim(-2.0, 102.0)
     ax_gate.set_yticks([0, 25, 50, 75, 100])
     ax_pressure.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
     total_title = "(d) total loss: OT comparison" if total_show_ot else "(d) total RollFlow loss"
-    ax_total.set_title(total_title, loc="left", fontweight="bold", fontsize=14)
+    ax_total.set_title(total_title, loc="left", fontsize=14)
     ax_total.set_ylabel("total loss")
     for axis in axes.flat:
         axis.grid(True, alpha=0.22, linewidth=0.7)

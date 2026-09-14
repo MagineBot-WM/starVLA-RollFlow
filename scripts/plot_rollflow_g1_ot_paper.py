@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot the G1 OT scaling/mask ablation without hiding LSD instability.
+"""Plot the fixed-OT G1 scaling/mask ablation without hiding LSD instability.
 
 The old plot used only ``lsd_loss`` (the post-gate contribution).  That is
 misleading for a stability analysis: an enabled gate can turn an exploding
@@ -250,39 +250,33 @@ def _load_rows(manifest: dict[str, Any], max_step: int | None) -> tuple[list[dic
 
 
 def _run_label(run: str, label: str) -> str:
-    """Use a compact, factorized label that is readable in one legend."""
-    no_ot = "no_ot" in run or "no OT" in label
+    """Use a compact label for the scaling/gate ablation."""
     no_scaling = "no_scaling" in run or "w/o scaling" in label
     no_gate = "no_gate" in run or "no mask" in label
     collapsed = no_scaling and no_gate
-    prefix = "no-OT" if no_ot else "OT"
     if collapsed:
-        return f"{prefix} · unstable (−S−G)"
+        return "unstable (−S−G)"
     if no_scaling:
-        return f"{prefix} · gate only (−S+G)"
+        return "gate only (−S+G)"
     if no_gate:
-        return f"{prefix} · scaling only (+S−G)"
-    return f"{prefix} · full (+S+G)"
+        return "scaling only (+S−G)"
+    return "full (+S+G)"
 
 
 def _run_style(run: str, label: str) -> tuple[str, str, float, str]:
-    """Stable color/style identity independent of manifest ordering."""
-    no_ot = "no_ot" in run or "no OT" in label
+    """Stable color/style identity for the scaling/gate ablation."""
     no_scaling = "no_scaling" in run or "w/o scaling" in label
     no_gate = "no_gate" in run or "no mask" in label
-    prefix = "no-OT" if no_ot else "OT"
     # Removing both protections is the collapse control even when an older
     # manifest did not include the parenthetical "(collapsed)" label.
     collapsed = no_scaling and no_gate
-    if collapsed and no_ot:
-        return "#7b2cbf", "--", 2.4, "no-OT · unstable (−S−G)"
     if collapsed:
-        return "#d55e00", "-", 2.4, "OT · unstable (−S−G)"
+        return "#d55e00", "-", 2.4, "unstable (−S−G)"
     if no_scaling:
-        return "#e69f00", "--" if no_ot else "-", 2.0, f"{prefix} · gate only (−S+G)"
+        return "#e69f00", "-", 2.0, "gate only (−S+G)"
     if no_gate:
-        return "#0072b2", "--" if no_ot else "-", 1.9, f"{prefix} · scaling only (+S−G)"
-    return "#009e73", "--" if no_ot else "-", 2.5, f"{prefix} · full (+S+G)"
+        return "#0072b2", "-", 1.9, "scaling only (+S−G)"
+    return "#009e73", "-", 2.5, "full (+S+G)"
 
 
 def _finite_values(group: list[dict[str, Any]], key: str) -> list[float]:
@@ -402,10 +396,10 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
         bbox_to_anchor=(0.5, 0.91),
-        ncol=3,
+        ncol=2,
         fontsize=11.5,
         frameon=False,
-        columnspacing=0.9,
+        columnspacing=1.4,
         handlelength=2.2,
     )
     fig.subplots_adjust(top=0.74, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)
@@ -510,7 +504,6 @@ def _write_report(
             + " | ".join(
                 (
                     _run_label(run, run_info["label"]),
-                    "no" if ("no_ot" in run or "no OT" in run_info["label"]) else "yes",
                     "on" if metadata[run]["use_lsd_scaling"] else "off",
                     "on" if metadata[run]["use_lsd_gate"] else "off",
                     fmt(min_fm),
@@ -545,7 +538,6 @@ def _write_report(
             "",
             "- **S (scaling)** multiplies the central-difference LSD metric by `2δ`, controlling its gradient magnitude.",
             "- **G (gate/mask)** rejects non-finite or over-budget per-sample LSD updates.",
-            "- **OT** denotes optimal-transport matching of noise to target trajectories.",
             "",
             scope_line,
             "",
@@ -555,15 +547,15 @@ def _write_report(
             "",
             f"Common comparison step: `{common_end}`. `FM @ common` is the last observation at or before that step; `last step` is the run's actual endpoint.",
             "",
-            "| run | OT | S | G | min FM | min step | FM @ common | last step | peak raw LSD/budget | peak rejection (%) |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| run | S | G | min FM | min step | FM @ common | last step | peak raw LSD/budget | peak rejection (%) |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
             *table,
             "",
             "## Interpretation",
             "",
-            "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the two observed unstable controls (OT and no-OT), where both FM and total loss first improve and then rebound.",
+            "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the unstable control, where both FM and total loss first improve and then rebound.",
             "",
-            "Both available scaling-only `+S−G` controls (OT and no-OT) remain stable in this window, so the observed rebound is not attributable to OT alone. The gate is not always active once scaling is present.",
+            "The scaling-only `+S−G` control remains stable in this window, while the gate is not always active once scaling is present.",
             "",
             "## Scope and limitations",
             "",

@@ -376,10 +376,10 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         ax_total.plot(x, total, color=color, lw=0.8, ls=line_style, alpha=0.22)
         ax_total.plot(x, _moving_average(total, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
 
-    ax_fm.set_title("(a) FM objective", loc="left", fontweight="bold", fontsize=14)
+    ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=14)
     ax_fm.set_ylabel("FM velocity MSE")
-    ax_pressure.set_title("(b) LSD pressure / budget", loc="left", fontweight="bold", fontsize=14)
-    ax_pressure.set_ylabel("raw LSD / budget")
+    ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontweight="bold", fontsize=14)
+    ax_pressure.set_ylabel("raw LSD loss / budget")
     ax_pressure.set_yscale("log")
     ax_gate.set_title("(c) LSD gate rejection", loc="left", fontweight="bold", fontsize=14)
     ax_gate.set_ylabel("rejected active samples (%)")
@@ -546,7 +546,7 @@ def _write_report(
             "",
             scope_line,
             "",
-            "Panel A is the training FM objective. Panel B normalizes raw LSD by its detached FM budget; the red region is above the budget threshold of one. Panel C shows how many active samples are rejected, and Panel D shows the total RollFlow objective. Faint traces are individual log values and thick traces are causal moving averages.",
+            "Panel A is the FM loss. Panel B normalizes raw LSD loss by its detached FM budget; the red region is above the budget threshold of one. Panel C shows how many active samples are rejected, and Panel D shows the total RollFlow loss. Faint traces are individual log values and thick traces are causal moving averages.",
             "",
             "## Observed window",
             "",

@@ -311,12 +311,12 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "Liberation Serif", "DejaVu Serif"],
             "axes.unicode_minus": False,
-            "font.size": 11,
-            "axes.titlesize": 14,
-            "axes.labelsize": 11,
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-            "legend.fontsize": 10.5,
+            "font.size": 12,
+            "axes.titlesize": 15,
+            "axes.labelsize": 12,
+            "xtick.labelsize": 10.5,
+            "ytick.labelsize": 10.5,
+            "legend.fontsize": 9.5,
         }
     )
 
@@ -338,7 +338,9 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         if group
     )
 
-    fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.4), sharex=True, constrained_layout=False)
+    # Render at approximately half-column width so a paper insertion does not
+    # shrink an otherwise full-page figure and make its labels unreadable.
+    fig, axes = plt.subplots(2, 2, figsize=(7.0, 4.6), sharex=True, constrained_layout=False)
     ax_fm, ax_pressure, ax_gate, ax_total = axes.flat
     legend_handles = []
     for run in order:
@@ -376,38 +378,38 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         ax_total.plot(x, total, color=color, lw=0.8, ls=line_style, alpha=0.22)
         ax_total.plot(x, _moving_average(total, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
 
-    ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=14)
+    ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=15)
     ax_fm.set_ylabel("FM velocity MSE")
-    ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontweight="bold", fontsize=14)
+    ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontweight="bold", fontsize=15)
     ax_pressure.set_ylabel("raw LSD loss / budget")
     ax_pressure.set_yscale("log")
-    ax_gate.set_title("(c) LSD gate rejection", loc="left", fontweight="bold", fontsize=14)
+    ax_gate.set_title("(c) LSD gate rejection", loc="left", fontweight="bold", fontsize=15)
     ax_gate.set_ylabel("rejected active samples (%)")
     ax_gate.set_ylim(-2.0, 102.0)
     ax_gate.set_yticks([0, 25, 50, 75, 100])
     ax_pressure.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
-    ax_total.set_title("(d) total RollFlow loss", loc="left", fontweight="bold", fontsize=14)
+    ax_total.set_title("(d) total RollFlow loss", loc="left", fontweight="bold", fontsize=15)
     ax_total.set_ylabel("total loss")
     for axis in axes.flat:
         axis.grid(True, alpha=0.22, linewidth=0.7)
         axis.set_xlabel("training step")
         axis.set_xlim(0, common_end)
 
-    fig.suptitle("RollFlow G1 stability ablation", fontsize=19, fontweight="bold", y=0.98)
+    fig.suptitle("RollFlow G1 stability ablation", fontsize=18, fontweight="bold", y=0.98)
     fig.legend(
         legend_handles,
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.935),
-        ncol=max(1, len(legend_handles)),
-        fontsize=10.5,
+        bbox_to_anchor=(0.5, 0.91),
+        ncol=3,
+        fontsize=9.5,
         frameon=False,
         columnspacing=1.4,
         handlelength=2.6,
     )
-    fig.subplots_adjust(top=0.84, bottom=0.095, left=0.075, right=0.985, hspace=0.28, wspace=0.22)
+    fig.subplots_adjust(top=0.74, bottom=0.12, left=0.105, right=0.985, hspace=0.40, wspace=0.30)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=220)
+    fig.savefig(out, dpi=300)
     fig.savefig(out.with_suffix(".pdf"))
     plt.close(fig)
 

@@ -458,20 +458,38 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
         axis.set_xlabel("training step")
 
     fig.suptitle("RollFlow G1 stability", fontsize=18, fontweight="bold", y=0.98)
-    # Keep the four mechanism keys with the stability panels instead of
-    # reserving a separate banner above the figure.  Panel C has open space on
-    # the right, so a compact 4-by-1 legend does not obscure the early spikes.
+    # Repeat the compact 4-by-1 mechanism key in each subplot.  A separate
+    # panel declaration can still replace panel D's key with an OT comparison
+    # legend when producing the dedicated OT figure.
+    legend_kwargs = {
+        "loc": "center right",
+        "ncol": 1,
+        "fontsize": 11.5,
+        "frameon": True,
+        "framealpha": 0.78,
+        "facecolor": "white",
+        "edgecolor": "none",
+        "labelspacing": 0.55,
+        "handlelength": 2.0,
+        "handletextpad": 0.45,
+    }
+    ax_fm.legend(
+        stability_handles,
+        [handle.get_label() for handle in stability_handles],
+        bbox_to_anchor=(0.98, 0.70),
+        **legend_kwargs,
+    )
+    ax_pressure.legend(
+        stability_handles,
+        [handle.get_label() for handle in stability_handles],
+        bbox_to_anchor=(0.98, 0.70),
+        **legend_kwargs,
+    )
     ax_gate.legend(
         stability_handles,
         [handle.get_label() for handle in stability_handles],
-        loc="center right",
         bbox_to_anchor=(0.98, 0.52),
-        ncol=1,
-        fontsize=11.5,
-        frameon=False,
-        labelspacing=0.55,
-        handlelength=2.0,
-        handletextpad=0.45,
+        **legend_kwargs,
     )
     if total_show_ot:
         ax_total.legend(
@@ -481,6 +499,13 @@ def _plot(rows: list[dict[str, Any]], manifest: dict[str, Any], out: Path, windo
             fontsize=11.5,
             frameon=False,
             handlelength=2.2,
+        )
+    else:
+        ax_total.legend(
+            stability_handles,
+            [handle.get_label() for handle in stability_handles],
+            bbox_to_anchor=(0.98, 0.70),
+            **legend_kwargs,
         )
     fig.subplots_adjust(top=0.87, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)
     out.parent.mkdir(parents=True, exist_ok=True)

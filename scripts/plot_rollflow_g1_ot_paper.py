@@ -259,9 +259,9 @@ def _run_label(run: str, label: str) -> str:
     if collapsed:
         return f"{prefix} · unstable (−S−G)"
     if no_scaling:
-        return f"{prefix} · gate (−S+G)"
+        return f"{prefix} · gate only (−S+G)"
     if no_gate:
-        return f"{prefix} · scaling (+S−G)"
+        return f"{prefix} · scaling only (+S−G)"
     return f"{prefix} · full (+S+G)"
 
 
@@ -279,9 +279,9 @@ def _run_style(run: str, label: str) -> tuple[str, str, float, str]:
     if collapsed:
         return "#d55e00", "-", 2.4, "OT · unstable (−S−G)"
     if no_scaling:
-        return "#e69f00", "--" if no_ot else "-", 2.0, f"{prefix} · gate (−S+G)"
+        return "#e69f00", "--" if no_ot else "-", 2.0, f"{prefix} · gate only (−S+G)"
     if no_gate:
-        return "#0072b2", "--" if no_ot else "-", 1.9, f"{prefix} · scaling (+S−G)"
+        return "#0072b2", "--" if no_ot else "-", 1.9, f"{prefix} · scaling only (+S−G)"
     return "#009e73", "--" if no_ot else "-", 2.5, f"{prefix} · full (+S+G)"
 
 
@@ -311,12 +311,12 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "Liberation Serif", "DejaVu Serif"],
             "axes.unicode_minus": False,
-            "font.size": 15,
-            "axes.titlesize": 16,
-            "axes.labelsize": 16,
-            "xtick.labelsize": 14,
-            "ytick.labelsize": 14,
-            "legend.fontsize": 13.5,
+            "font.size": 13,
+            "axes.titlesize": 14,
+            "axes.labelsize": 14,
+            "xtick.labelsize": 12,
+            "ytick.labelsize": 12,
+            "legend.fontsize": 11.5,
         }
     )
 
@@ -378,17 +378,17 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         ax_total.plot(x, total, color=color, lw=0.8, ls=line_style, alpha=0.22)
         ax_total.plot(x, _moving_average(total, window), color=color, lw=linewidth, ls=line_style, alpha=0.95)
 
-    ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=16)
+    ax_fm.set_title("(a) FM loss", loc="left", fontweight="bold", fontsize=14)
     ax_fm.set_ylabel("FM velocity MSE")
-    ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontweight="bold", fontsize=16)
+    ax_pressure.set_title("(b) LSD loss / budget", loc="left", fontweight="bold", fontsize=14)
     ax_pressure.set_ylabel("raw LSD loss / budget")
     ax_pressure.set_yscale("log")
-    ax_gate.set_title("(c) LSD gate rejection", loc="left", fontweight="bold", fontsize=16)
+    ax_gate.set_title("(c) LSD gate rejection", loc="left", fontweight="bold", fontsize=14)
     ax_gate.set_ylabel("active rejects (%)")
     ax_gate.set_ylim(-2.0, 102.0)
     ax_gate.set_yticks([0, 25, 50, 75, 100])
     ax_pressure.axhline(1.0, color="#555555", lw=1, ls=":", alpha=0.8)
-    ax_total.set_title("(d) total RollFlow loss", loc="left", fontweight="bold", fontsize=16)
+    ax_total.set_title("(d) total RollFlow loss", loc="left", fontweight="bold", fontsize=14)
     ax_total.set_ylabel("total loss")
     for axis in axes.flat:
         axis.grid(True, alpha=0.22, linewidth=0.7)
@@ -396,17 +396,17 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
     for axis in (ax_gate, ax_total):
         axis.set_xlabel("training step")
 
-    fig.suptitle("RollFlow G1 stability ablation", fontsize=20, fontweight="bold", y=0.98)
+    fig.suptitle("RollFlow G1 stability ablation", fontsize=18, fontweight="bold", y=0.98)
     fig.legend(
         legend_handles,
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
         bbox_to_anchor=(0.5, 0.91),
         ncol=3,
-        fontsize=13.5,
+        fontsize=11.5,
         frameon=False,
-        columnspacing=0.6,
-        handlelength=2.0,
+        columnspacing=1.4,
+        handlelength=2.6,
     )
     fig.subplots_adjust(top=0.74, bottom=0.11, left=0.105, right=0.985, hspace=0.50, wspace=0.30)
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -249,34 +249,44 @@ def _load_rows(manifest: dict[str, Any], max_step: int | None) -> tuple[list[dic
     return rows, metadata
 
 
-def _run_label(run: str, label: str) -> str:
+def _is_no_ot(run: str, label: str) -> bool:
+    return "no_ot" in run or "no OT" in label
+
+
+def _run_label(run: str, label: str, *, show_ot: bool = False) -> str:
     """Use a compact label for the scaling/gate ablation."""
+    no_ot = _is_no_ot(run, label)
     no_scaling = "no_scaling" in run or "w/o scaling" in label
     no_gate = "no_gate" in run or "no mask" in label
     collapsed = no_scaling and no_gate
+    prefix = ("no-OT · " if no_ot else "OT · ") if show_ot else ""
     if collapsed:
-        return "unstable (−S−G)"
+        return prefix + "unstable (−S−G)"
     if no_scaling:
-        return "gate only (−S+G)"
+        return prefix + "gate only (−S+G)"
     if no_gate:
-        return "scaling only (+S−G)"
-    return "full (+S+G)"
+        return prefix + "scaling only (+S−G)"
+    return prefix + "full (+S+G)"
 
 
-def _run_style(run: str, label: str) -> tuple[str, str, float, str]:
+def _run_style(run: str, label: str, *, show_ot: bool = False) -> tuple[str, str, float, str]:
     """Stable color/style identity for the scaling/gate ablation."""
+    no_ot = _is_no_ot(run, label)
     no_scaling = "no_scaling" in run or "w/o scaling" in label
     no_gate = "no_gate" in run or "no mask" in label
     # Removing both protections is the collapse control even when an older
     # manifest did not include the parenthetical "(collapsed)" label.
     collapsed = no_scaling and no_gate
+    prefix = ("no-OT · " if no_ot else "OT · ") if show_ot else ""
+    line_style = "--" if no_ot else "-"
     if collapsed:
-        return "#d55e00", "-", 2.4, "unstable (−S−G)"
+        color = "#7b2cbf" if no_ot else "#d55e00"
+        return color, line_style, 2.4, prefix + "unstable (−S−G)"
     if no_scaling:
-        return "#e69f00", "-", 2.0, "gate only (−S+G)"
+        return "#e69f00", line_style, 2.0, prefix + "gate only (−S+G)"
     if no_gate:
-        return "#0072b2", "-", 1.9, "scaling only (+S−G)"
-    return "#009e73", "-", 2.5, "full (+S+G)"
+        return "#0072b2", line_style, 1.9, prefix + "scaling only (+S−G)"
+    return "#009e73", line_style, 2.5, prefix + "full (+S+G)"
 
 
 def _finite_values(group: list[dict[str, Any]], key: str) -> list[float]:
@@ -331,16 +341,21 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         for group in by_run.values()
         if group
     )
-
     # Render at approximately half-column width so a paper insertion does not
     # shrink an otherwise full-page figure and make its labels unreadable.
     fig, axes = plt.subplots(2, 2, figsize=(7.0, 5.2), sharex=True, constrained_layout=False)
     ax_fm, ax_pressure, ax_gate, ax_total = axes.flat
+    show_ot = (
+        any(_is_no_ot(row["run"], row["label"]) for row in rows)
+        and any(not _is_no_ot(row["run"], row["label"]) for row in rows)
+    )
     legend_handles = []
     for run in order:
         group = sorted(by_run[run], key=lambda row: row["step"])
         original_label = group[0]["label"]
-        color, line_style, linewidth, label = _run_style(run, original_label)
+        color, line_style, linewidth, label = _run_style(
+            run, original_label, show_ot=show_ot
+        )
         x = [row["step"] for row in group]
         fm = [row.get("fm_loss", math.nan) for row in group]
         total = [row.get("loss", math.nan) for row in group]
@@ -396,10 +411,10 @@ def _plot(rows: list[dict[str, Any]], out: Path, window: int) -> None:
         [handle.get_label() for handle in legend_handles],
         loc="upper center",
         bbox_to_anchor=(0.5, 0.91),
-        ncol=2,
+        ncol=3 if show_ot else 2,
         fontsize=11.5,
         frameon=False,
-        columnspacing=1.4,
+        columnspacing=0.9 if show_ot else 1.4,
         handlelength=2.2,
     )
     fig.subplots_adjust(top=0.74, bottom=0.11, left=0.095, right=0.985, hspace=0.50, wspace=0.30)
@@ -480,6 +495,10 @@ def _write_report(
         for group in by_run.values()
         if group
     )
+    show_ot = (
+        any(_is_no_ot(run, group[0]["label"]) for run, group in by_run.items())
+        and any(not _is_no_ot(run, group[0]["label"]) for run, group in by_run.items())
+    )
 
     def fmt(value: float) -> str:
         return "—" if not math.isfinite(value) else f"{value:.3g}"
@@ -499,21 +518,22 @@ def _write_report(
             (row["step"] for row in group if row.get("fm_loss") == min_fm),
             math.nan,
         )
+        fields = [
+            _run_label(run, run_info["label"], show_ot=show_ot),
+            "on" if metadata[run]["use_lsd_scaling"] else "off",
+            "on" if metadata[run]["use_lsd_gate"] else "off",
+            fmt(min_fm),
+            str(int(min_step)) if math.isfinite(min_step) else "—",
+            fmt(_value_at_or_before(group, "fm_loss", common_end)),
+            str(group[-1]["step"]),
+            fmt(max(pressure) if pressure else math.nan),
+            fmt(100.0 * max(rejection) if rejection else math.nan) + "%",
+        ]
+        if show_ot:
+            fields.insert(1, "no" if _is_no_ot(run, run_info["label"]) else "yes")
         table.append(
             "| "
-            + " | ".join(
-                (
-                    _run_label(run, run_info["label"]),
-                    "on" if metadata[run]["use_lsd_scaling"] else "off",
-                    "on" if metadata[run]["use_lsd_gate"] else "off",
-                    fmt(min_fm),
-                    str(int(min_step)) if math.isfinite(min_step) else "—",
-                    fmt(_value_at_or_before(group, "fm_loss", common_end)),
-                    str(group[-1]["step"]),
-                    fmt(max(pressure) if pressure else math.nan),
-                    fmt(100.0 * max(rejection) if rejection else math.nan) + "%",
-                )
-            )
+            + " | ".join(fields)
             + " |"
         )
 
@@ -528,6 +548,26 @@ def _write_report(
         f"`fm_curriculum_steps={settings.get('fm_curriculum_steps')}`, `p_fm={settings.get('p_fm')}`, "
         f"`w_lsd={settings.get('w_lsd')}`, seed `{settings.get('seed')}`."
     )
+    reading_notes = [
+        "- **S (scaling)** multiplies the central-difference LSD metric by `2δ`, controlling its gradient magnitude.",
+        "- **G (gate/mask)** rejects non-finite or over-budget per-sample LSD updates.",
+    ]
+    if show_ot:
+        reading_notes.append("- **OT** denotes optimal-transport matching of noise to target trajectories.")
+    table_header = "| run | S | G | min FM | min step | FM @ common | last step | peak raw LSD/budget | peak rejection (%) |"
+    table_separator = "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+    if show_ot:
+        table_header = "| run | OT | S | G | min FM | min step | FM @ common | last step | peak raw LSD/budget | peak rejection (%) |"
+        table_separator = "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+    interpretation = [
+        "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the unstable control, where both FM and total loss first improve and then rebound.",
+        "The scaling-only `+S−G` control remains stable in this window, while the gate is not always active once scaling is present.",
+    ]
+    if show_ot:
+        interpretation = [
+            "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the unstable controls, where both FM and total loss first improve and then rebound.",
+            "The available matched OT/no-OT pairs (scaling-only and unstable) show nearly identical trends, so OT is not the dominant stability mechanism in this diagnostic. No-OT full and gate-only pairs are not included here.",
+        ]
     text = "\n".join(
         [
             "# RollFlow G1 stability ablation",
@@ -536,8 +576,7 @@ def _write_report(
             "",
             f"The figure (`{figure_name}`) separates the two safety mechanisms that are easy to conflate:",
             "",
-            "- **S (scaling)** multiplies the central-difference LSD metric by `2δ`, controlling its gradient magnitude.",
-            "- **G (gate/mask)** rejects non-finite or over-budget per-sample LSD updates.",
+            *reading_notes,
             "",
             scope_line,
             "",
@@ -547,15 +586,13 @@ def _write_report(
             "",
             f"Common comparison step: `{common_end}`. `FM @ common` is the last observation at or before that step; `last step` is the run's actual endpoint.",
             "",
-            "| run | S | G | min FM | min step | FM @ common | last step | peak raw LSD/budget | peak rejection (%) |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            table_header,
+            table_separator,
             *table,
             "",
             "## Interpretation",
             "",
-            "In this matched historical window, scaling keeps the raw LSD/budget proxy well below one. Removing scaling drives the proxy above one; when the gate is enabled, it rejects the offending sample updates. Removing both protections produces the unstable control, where both FM and total loss first improve and then rebound.",
-            "",
-            "The scaling-only `+S−G` control remains stable in this window, while the gate is not always active once scaling is present.",
+            *interpretation,
             "",
             "## Scope and limitations",
             "",

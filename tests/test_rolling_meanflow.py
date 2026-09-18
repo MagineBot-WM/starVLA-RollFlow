@@ -35,6 +35,17 @@ class _LearnableConstant(nn.Module):
         return self.value.expand_as(z)
 
 
+class _CaptureQuery(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    def forward(self, z, source_time, target_time, context, **kwargs):
+        del context, kwargs
+        self.calls.append((source_time.detach().clone(), target_time.detach().clone()))
+        return torch.zeros_like(z)
+
+
 def _config(**overrides):
     values = {
         "horizon": 8,
@@ -107,6 +118,23 @@ def test_k_sampling_probabilities_and_config_validation():
         assert counts[k] / 4000 == pytest.approx(0.1, abs=0.025)
     with pytest.raises(ValueError, match="p_fm"):
         _config(p_fm=1.1)
+
+
+def test_inference_velocity_mode_switches_query_without_changing_step_count():
+    cfg = _config(iterative_cold_start=False, reset_cache_each_step=True)
+    flow = RollFlow(cfg)
+    model = _CaptureQuery()
+
+    flow.step(model, batch=1, velocity_mode="average")
+    average_s, average_t = model.calls[-1]
+    assert torch.any(average_t > average_s)
+
+    flow.step(model, batch=1, velocity_mode="instant")
+    instant_s, instant_t = model.calls[-1]
+    torch.testing.assert_close(instant_s, instant_t)
+
+    with pytest.raises(ValueError, match="velocity_mode"):
+        flow.step(model, batch=1, velocity_mode="bad")
 
 
 def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():

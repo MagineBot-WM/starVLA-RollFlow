@@ -72,6 +72,8 @@ from typing import Any, Optional
 import torch
 from torch import Tensor, nn
 
+_VELOCITY_MODES = ("average", "instant")
+
 # =============================================================================
 # 1. Configuration
 # =============================================================================
@@ -85,6 +87,7 @@ class RollFlowConfig:
 
     finite_difference_delta: float = 0.01
     inference_steps: Optional[int] = None
+    velocity_mode: str = "average"
 
     p_k1: float = 0.7
     p_fm: float = 0.3
@@ -113,6 +116,8 @@ class RollFlowConfig:
             raise ValueError("p_k1 must lie in [0, 1]")
         if not 0.0 <= self.p_fm <= 1.0:
             raise ValueError("p_fm must lie in [0, 1]")
+        if self.velocity_mode not in _VELOCITY_MODES:
+            raise ValueError("velocity_mode must be 'average' or 'instant'")
         if self.fm_curriculum_steps < 0:
             raise ValueError("fm_curriculum_steps must be non-negative")
 
@@ -650,6 +655,7 @@ class RollFlow:
         self.time = StaircaseTimeSampler(cfg)
         self._cache: Optional[Tensor] = None
         self._cache_steps: Optional[int] = None
+        self._cache_mode: Optional[str] = None
 
     def loss(
         self,
@@ -712,6 +718,7 @@ class RollFlow:
     def reset(self) -> None:
         self._cache = None
         self._cache_steps = None
+        self._cache_mode = None
 
     @property
     def cache_info(self) -> Optional[RollFlowCacheInfo]:
@@ -734,8 +741,13 @@ class RollFlow:
         device=None,
         dtype=None,
         refinement_steps: Optional[int] = None,
+        velocity_mode: Optional[str] = None,
         **model_kwargs,
     ) -> Tensor:
+        """Advance the cache with interval-average or source-time velocity."""
+        velocity_mode = self.cfg.velocity_mode if velocity_mode is None else velocity_mode
+        if velocity_mode not in _VELOCITY_MODES:
+            raise ValueError("velocity_mode must be 'average' or 'instant'")
         cfg = self.cfg
         K = cfg.resolved_inference_steps if refinement_steps is None else int(refinement_steps)
         if not cfg.valid_steps(K):
@@ -743,6 +755,8 @@ class RollFlow:
 
         device, dtype = infer_device_dtype(model, context, device, dtype)
         if cfg.reset_cache_each_step:
+            self.reset()
+        elif self._cache is not None and self._cache_mode != velocity_mode:
             self.reset()
 
         z, cold = self._rolling_input(batch, device, dtype, K)
@@ -755,16 +769,18 @@ class RollFlow:
 
         if cold and cfg.iterative_cold_start:
             cache = self._cold_iterative(
-                model, z, times.t, K, context, model_kwargs, dtype
+                model, z, times.t, K, context, model_kwargs, dtype, velocity_mode
             )
         else:
+            query_t = times.s if velocity_mode == "instant" else times.t
             velocity = self._predict_inference(
-                model, z, times.s, times.t, context, model_kwargs
+                model, z, times.s, query_t, context, model_kwargs
             )
             cache = flow_map(z, times.s, times.t, velocity).to(dtype)
 
         self._cache = cache.detach()
         self._cache_steps = K
+        self._cache_mode = velocity_mode
         return self._cache[:, : cfg.chunk_size].clone()
 
     def _rolling_input(self, batch, device, dtype, K):
@@ -783,11 +799,12 @@ class RollFlow:
         tail = torch.randn(batch, cfg.chunk_size, cfg.action_dim, device=device, dtype=dtype)
         return torch.cat((keep, tail), dim=1), False
 
-    def _cold_iterative(self, model, z, final_t, K, context, kwargs, dtype):
+    def _cold_iterative(self, model, z, final_t, K, context, kwargs, dtype, velocity_mode):
         current_s = torch.zeros_like(final_t)
         for level in range(1, K + 1):
             next_t = torch.minimum(final_t, torch.full_like(final_t, level / K))
-            v = self._predict_inference(model, z, current_s, next_t, context, kwargs)
+            query_t = current_s if velocity_mode == "instant" else next_t
+            v = self._predict_inference(model, z, current_s, query_t, context, kwargs)
             z = flow_map(z, current_s, next_t, v).to(dtype)
             current_s = next_t
         return z

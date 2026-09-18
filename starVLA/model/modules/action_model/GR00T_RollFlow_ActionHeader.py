@@ -49,6 +49,7 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         num_target_vision_tokens: int = 32,
         finite_difference_delta: float = 0.01,
         inference_steps: Optional[int] = None,
+        velocity_mode: str = "average",
         p_k1: float = 0.7,
         p_fm: float = 0.3,
         fm_curriculum_steps: int = 5000,
@@ -74,6 +75,7 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         self.num_target_vision_tokens = num_target_vision_tokens
         self.finite_difference_delta = finite_difference_delta
         self.inference_steps = inference_steps
+        self.velocity_mode = velocity_mode
         self.p_k1 = p_k1
         self.p_fm = p_fm
         self.fm_curriculum_steps = fm_curriculum_steps
@@ -157,6 +159,7 @@ class RollFlowActionHead(nn.Module):
                     config,
                     ("inference_steps", "num_inference_timesteps"),
                 ),
+                velocity_mode=str(_first_config_value(config, ("velocity_mode",), "average")),
                 p_k1=float(_first_config_value(config, ("p_k1",), 0.7)),
                 p_fm=float(_first_config_value(config, ("p_fm",), 0.3)),
                 fm_curriculum_steps=int(
@@ -210,6 +213,7 @@ class RollFlowActionHead(nn.Module):
         state: Optional[torch.Tensor] = None,
         encoder_attention_mask=None,
         refinement_steps: Optional[int] = None,
+        velocity_mode: Optional[str] = None,
     ) -> torch.Tensor:
         """Return the next executable chunk shaped ``[B,C,A]`` and update the cache."""
         return self.rollflow.step(
@@ -219,6 +223,7 @@ class RollFlowActionHead(nn.Module):
             device=vl_embs.device,
             dtype=self.dtype,
             refinement_steps=refinement_steps,
+            velocity_mode=velocity_mode,
             state_features=self._encode_state(state),
             encoder_attention_mask=encoder_attention_mask,
         )

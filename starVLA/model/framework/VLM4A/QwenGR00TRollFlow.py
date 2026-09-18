@@ -109,6 +109,7 @@ class QwenGR00TRollFlowDefaultConfig:
             "p_fm": 0.3,
             "fm_curriculum_steps": 5000,
             "inference_steps": 4,
+            "velocity_mode": "average",
             "w_fm": 1.0,
             "w_lsd": 0.25,
             "use_ot": True,
@@ -302,6 +303,7 @@ class Qwen_GR00T_RollFlow(baseframework):
                 state,
                 encoder_attention_mask=backbone_attention_mask,
                 refinement_steps=kwargs.get("refinement_steps"),
+                velocity_mode=kwargs.get("velocity_mode"),
             )  # (B, chunk_len, action_dim)
 
         # NumPy has no bfloat16 dtype. DeepSpeed/bf16 evaluation can propagate

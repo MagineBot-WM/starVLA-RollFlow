@@ -70,6 +70,12 @@ class LiberoRollFlowDataConfig(Libero4in1DataConfig):
     action_indices = list(range(32))
 
 
+class LiberoRollFlowH128DataConfig(Libero4in1DataConfig):
+    """LIBERO observations with a 128-step rolling action horizon."""
+
+    action_indices = list(range(128))
+
+
 class OpenPILibero4in1DataConfig(Libero4in1DataConfig):
     def transform(self):
         return ComposedModalityTransform(transforms=[
@@ -105,6 +111,7 @@ class OpenPILibero4in1DataConfig(Libero4in1DataConfig):
 ROBOT_TYPE_CONFIG_MAP = {
     "libero_franka": Libero4in1DataConfig(),
     "libero_franka_rollflow": LiberoRollFlowDataConfig(),
+    "libero_franka_rollflow_h128": LiberoRollFlowH128DataConfig(),
     "openpi_libero_franka": OpenPILibero4in1DataConfig(),
 }
 
@@ -134,6 +141,12 @@ DATASET_NAMED_MIXTURES = {
         ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow"),
         ("libero_spatial_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow"),
         ("libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow"),
+    ],
+    "libero_all_rollflow_h128": [
+        ("libero_object_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h128"),
+        ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h128"),
+        ("libero_spatial_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h128"),
+        ("libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka_rollflow_h128"),
     ],
     "openpi_libero_all": [
         ("libero_object_no_noops_1.0.0_lerobot", 1.0, "openpi_libero_franka"),

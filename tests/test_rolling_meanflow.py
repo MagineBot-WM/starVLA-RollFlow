@@ -137,9 +137,28 @@ def test_inference_velocity_mode_switches_query_without_changing_step_count():
         flow.step(model, batch=1, velocity_mode="bad")
 
 
+def test_h128_k4_returns_one_32_action_execution_chunk():
+    cfg = _config(
+        horizon=128,
+        chunk_size=32,
+        inference_steps=4,
+        iterative_cold_start=False,
+        reset_cache_each_step=True,
+    )
+    flow = RollFlow(cfg)
+    output = flow.step(_CaptureQuery(), batch=2)
+
+    assert output.shape == (2, 32, 1)
+    assert flow.cache_info is not None
+    assert flow.cache_info.shape == (2, 128, 1)
+    assert flow.cache_info.refinement_steps == 4
+
+
 def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():
     torch.manual_seed(0)
-    rollflow = RollFlow(_config(p_fm=0.2, fm_curriculum_steps=100))
+    rollflow = RollFlow(
+        _config(p_fm=0.2, fm_curriculum_steps=100, total_train_steps=200)
+    )
     model = _LearnableConstant()
     actions = torch.randn(32, 8, 1)
 
@@ -149,8 +168,12 @@ def test_fm_curriculum_starts_diagonal_and_reaches_target_probability():
     assert start["active_lsd_frac"] == 0.0
     assert model.batch_sizes == [32]
 
-    _, middle = rollflow.loss(model, actions, step=50)
-    _, end = rollflow.loss(model, actions, step=100)
+    _, warmup = rollflow.loss(model, actions, step=50)
+    _, boundary = rollflow.loss(model, actions, step=100)
+    _, middle = rollflow.loss(model, actions, step=150)
+    _, end = rollflow.loss(model, actions, step=200)
+    assert warmup["p_fm"] == pytest.approx(1.0)
+    assert boundary["p_fm"] == pytest.approx(1.0)
     assert middle["p_fm"] == pytest.approx(0.6)
     assert end["p_fm"] == pytest.approx(0.2)
 

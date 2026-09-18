@@ -483,9 +483,21 @@ class VLATrainer(TrainerUtils):
             if self.accelerator.sync_gradients:
                 self.lr_scheduler.step()
 
-        return {
-            "action_dit_loss": action_loss.item(),
-        }
+        metrics = {"action_dit_loss": action_loss.item()}
+        rollflow_metrics = output_dict.get("rollflow_metrics", {})
+        for name in (
+            "fm_loss",
+            "lsd_loss",
+            "p_fm",
+            "fm_only_frac",
+            "active_lsd_frac",
+        ):
+            value = rollflow_metrics.get(name) if isinstance(rollflow_metrics, dict) else None
+            if value is not None:
+                if torch.is_tensor(value):
+                    value = value.detach().float().mean().item()
+                metrics[f"rollflow/{name}"] = float(value)
+        return metrics
 
     def _finalize_training(self):
         """Training end processing."""

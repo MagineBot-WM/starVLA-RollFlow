@@ -57,8 +57,10 @@ Training samples K from the divisors of M=H/C.  K=1 is favoured, while the
 remaining choices share the residual probability.  K independently sorted
 target times are expanded over equal action blocks, and one source ratio per
 sample gives s=ratio*t.  An FM-only curriculum starts with s=t and anneals to
-the configured mixture probability.  Deployment still uses the exact rolling
-staircase needed for cache alignment.
+the configured mixture probability.  Specifically, ``fm_curriculum_steps``
+keeps p_fm=1, then p_fm decays linearly to its floor over the remaining
+``total_train_steps``.  Deployment still uses the exact rolling staircase
+needed for cache alignment.
 
 There is no JVP, CSF, Split loss, persistent training cache, or adjacent-window
 training sampler.  Rolling state exists only at inference.
@@ -90,8 +92,10 @@ class RollFlowConfig:
     velocity_mode: str = "average"
 
     p_k1: float = 0.7
-    p_fm: float = 0.3
-    fm_curriculum_steps: int = 5000
+    p_fm: float = 0.7
+    # Pure-FM warmup; after this, p_fm decays linearly to its floor.
+    fm_curriculum_steps: int = 20_000
+    total_train_steps: Optional[int] = None
 
     w_fm: float = 1.0
     w_lsd: float = 0.5
@@ -120,6 +124,8 @@ class RollFlowConfig:
             raise ValueError("velocity_mode must be 'average' or 'instant'")
         if self.fm_curriculum_steps < 0:
             raise ValueError("fm_curriculum_steps must be non-negative")
+        if self.total_train_steps is not None and self.total_train_steps < 0:
+            raise ValueError("total_train_steps must be non-negative or None")
 
         if not self.valid_steps(self.resolved_inference_steps):
             raise ValueError(
@@ -677,9 +683,15 @@ class RollFlow:
         if cfg.use_ot:
             x0 = ot_match(x1, x0, pad=pad)
 
-        curriculum = cfg.fm_curriculum_steps
-        progress = 1.0 if curriculum == 0 else min(max(step, 0) / curriculum, 1.0)
-        p_fm = 1.0 - progress * (1.0 - cfg.p_fm)
+        warmup = cfg.fm_curriculum_steps
+        total = cfg.total_train_steps
+        if step < warmup:
+            p_fm = 1.0
+        elif total is None or total <= warmup:
+            p_fm = cfg.p_fm
+        else:
+            progress = min(max((step - warmup) / (total - warmup), 0.0), 1.0)
+            p_fm = 1.0 - progress * (1.0 - cfg.p_fm)
         times = self.time.sample_training(B, device=x.device, p_fm=p_fm)
         loss, stats = central_difference_lsd(
             model,
@@ -744,7 +756,13 @@ class RollFlow:
         velocity_mode: Optional[str] = None,
         **model_kwargs,
     ) -> Tensor:
-        """Advance the cache with interval-average or source-time velocity."""
+        """Advance the rolling cache and return the next execution chunk.
+
+        ``horizon`` is the cache length, ``chunk_size`` is the number of
+        actions returned per call, and ``refinement_steps`` is the number of
+        flow refinements.  For example, ``H=128, C=32, K=4`` keeps four
+        32-action blocks in the cache and returns ``[B, 32, action_dim]``.
+        """
         velocity_mode = self.cfg.velocity_mode if velocity_mode is None else velocity_mode
         if velocity_mode not in _VELOCITY_MODES:
             raise ValueError("velocity_mode must be 'average' or 'instant'")

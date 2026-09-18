@@ -94,7 +94,8 @@ class QwenGR00TRollFlowDefaultConfig:
             "action_dim": 7,
             # State dimension (proprioception input)
             "state_dim": 7,
-            # Canonical chunk length (number of action steps the head predicts).
+            # Cache horizon. ``execution_horizon`` below is the number of
+            # actions emitted per predict call (e.g. H=128, C=32 -> 4 blocks).
             # Legacy YAMLs may use future_action_window_size = action_horizon - 1;
             # apply_config_compat normalises both directions.
             "action_horizon": 32,
@@ -107,6 +108,7 @@ class QwenGR00TRollFlowDefaultConfig:
             "finite_difference_delta": 0.01,
             "p_k1": 0.7,
             "p_fm": 0.3,
+            # Pure FM warmup; then p_fm decays linearly to its floor by max_train_steps.
             "fm_curriculum_steps": 5000,
             "inference_steps": 4,
             "velocity_mode": "average",
@@ -183,7 +185,7 @@ class Qwen_GR00T_RollFlow(baseframework):
         self,
         examples: Optional[List[dict]] = None,
         **kwargs,
-    ) -> dict[str, torch.Tensor]:
+    ) -> dict[str, object]:
         """ """
         batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
@@ -246,7 +248,12 @@ class Qwen_GR00T_RollFlow(baseframework):
                 training_step=int(kwargs.get("training_step", 0)),
             )  # (B, chunk_len, action_dim)
 
-        return {"action_loss": action_loss}
+        return {
+            "action_loss": action_loss,
+            # Scalar RollFlow diagnostics are detached Python values and do
+            # not participate in the backward graph.
+            "rollflow_metrics": self.action_model.last_loss_stats or {},
+        }
 
     @torch.inference_mode()
     def predict_action(

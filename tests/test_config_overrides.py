@@ -358,13 +358,15 @@ class LiberoLauncherOverrideTest(unittest.TestCase):
                     pathlib.Path({str(output)!r}).write_text("\\n".join(sys.argv[1:]))
                     """))
             recorder.chmod(recorder.stat().st_mode | stat.S_IXUSR)
+            checkpoint = Path(tmp) / "model.pt"
+            checkpoint.write_bytes(b"test checkpoint")
 
             env = os.environ.copy()
             env.update(
                 {
                     "STARVLA_DIR": str(Path.cwd()),
                     "STARVLA_PYTHON": str(recorder),
-                    "CKPT": "/tmp/model.pt",
+                    "CKPT": str(checkpoint),
                     "GPU_ID": "0",
                     "PORT": "6694",
                     "USE_BF16": "",
@@ -424,7 +426,10 @@ class LiberoLauncherOverrideTest(unittest.TestCase):
         self.assertEqual(empty_result.returncode, 0, msg=empty_result.stdout + empty_result.stderr)
         self.assertNotIn("--config_override", unset_args)
         self.assertNotIn("--config_override", empty_args)
-        self.assertEqual(unset_args, empty_args)
+        # Each invocation uses a fresh temporary checkpoint path; the command
+        # must otherwise be identical when the optional override is unset.
+        self.assertEqual(unset_args[:2], empty_args[:2])
+        self.assertEqual(unset_args[3:], empty_args[3:])
 
     def test_invalid_use_canonical_forward_fails_before_server_command(self):
         result, args = self._run_launcher(use_canonical_forward="flase")

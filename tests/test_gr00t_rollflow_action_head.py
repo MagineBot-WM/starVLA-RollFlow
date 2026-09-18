@@ -171,6 +171,17 @@ def test_rollflow_head_disables_stochastic_finite_differences():
     assert model.model.config.final_dropout is False
 
 
+def test_rollflow_head_uses_trainer_max_steps_for_fm_schedule():
+    config = _config()
+    config.trainer = SimpleNamespace(max_train_steps=1234)
+    config.framework.action_model.fm_only_steps = 321
+
+    model = RollFlowActionHead(config)
+
+    assert model.rollflow.cfg.total_train_steps == 1234
+    assert model.rollflow.cfg.fm_curriculum_steps == 321
+
+
 def test_config_defaults_and_legacy_gr00t_checkpoint_loading():
     defaults = RollFlowActionHeadConfig()
     assert defaults.diffusion_model_cfg == {}

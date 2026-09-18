@@ -147,6 +147,8 @@ class RollFlowActionHead(nn.Module):
             self.position_embedding = nn.Embedding(config.max_seq_len, self.input_embedding_dim)
             nn.init.normal_(self.position_embedding.weight, mean=0.0, std=0.02)
 
+        trainer_config = getattr(full_config, "trainer", None)
+        total_train_steps = getattr(trainer_config, "max_train_steps", None)
         self.rollflow = RollFlow(
             RollFlowConfig(
                 horizon=self.action_horizon,
@@ -163,7 +165,15 @@ class RollFlowActionHead(nn.Module):
                 p_k1=float(_first_config_value(config, ("p_k1",), 0.7)),
                 p_fm=float(_first_config_value(config, ("p_fm",), 0.3)),
                 fm_curriculum_steps=int(
-                    _first_config_value(config, ("fm_curriculum_steps",), 5000)
+                    _first_config_value(
+                        config,
+                        # ``fm_only_steps`` is retained for old experiment YAMLs.
+                        ("fm_only_steps", "fm_curriculum_steps"),
+                        5000,
+                    )
+                ),
+                total_train_steps=(
+                    None if total_train_steps is None else int(total_train_steps)
                 ),
                 w_fm=float(_first_config_value(config, ("w_fm",), 1.0)),
                 w_lsd=float(_first_config_value(config, ("w_lsd",), 0.5)),

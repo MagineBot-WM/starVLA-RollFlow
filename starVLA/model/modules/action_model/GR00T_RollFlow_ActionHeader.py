@@ -51,12 +51,12 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         finite_difference_delta: float = 0.01,
         inference_steps: Optional[int] = None,
         p_k1: float = 0.7,
-        p_fm: float = 0.5,
-        fm_only_steps: int = 10_000,
-        w_lsd: float = 0.1,
+        p_fm: float = 0.7,
+        fm_only_steps: int = 30_000,
+        mf_kv: float = 1.0,
+        mf_weight: float = 0.1,
+        mf_loss_threshold: Optional[float] = 0.5,
         use_ot: bool = True,
-        use_lsd_scaling: bool = True,
-        use_lsd_gate: bool = True,
         action_loss_weights: Optional[Sequence[float]] = None,
         clip_velocity: float = 0.0,
         iterative_cold_start: bool = False,
@@ -80,10 +80,10 @@ class RollFlowActionHeadConfig(PretrainedConfig):
         self.p_k1 = p_k1
         self.p_fm = p_fm
         self.fm_only_steps = fm_only_steps
-        self.w_lsd = w_lsd
+        self.mf_kv = mf_kv
+        self.mf_weight = mf_weight
+        self.mf_loss_threshold = mf_loss_threshold
         self.use_ot = use_ot
-        self.use_lsd_scaling = use_lsd_scaling
-        self.use_lsd_gate = use_lsd_gate
         self.action_loss_weights = action_loss_weights
         self.clip_velocity = clip_velocity
         self.iterative_cold_start = iterative_cold_start
@@ -168,16 +168,14 @@ class RollFlowActionHead(nn.Module):
                     ("inference_steps", "num_inference_timesteps"),
                 ),
                 p_k1=float(_first_config_value(config, ("p_k1",), 0.7)),
-                p_fm=float(_first_config_value(config, ("p_fm",), 0.5)),
-                fm_only_steps=int(
-                    _first_config_value(config, ("fm_only_steps",), 10_000)
+                p_fm=float(_first_config_value(config, ("p_fm",), 0.7)),
+                fm_only_steps=int(_first_config_value(config, ("fm_only_steps",), 30_000)),
+                mf_kv=float(_first_config_value(config, ("mf_kv",), 1.0)),
+                mf_weight=float(_first_config_value(config, ("mf_weight",), 0.1)),
+                mf_loss_threshold=_first_config_value(
+                    config, ("mf_loss_threshold",), 0.5
                 ),
-                w_lsd=float(_first_config_value(config, ("w_lsd",), 0.1)),
                 use_ot=bool(_first_config_value(config, ("use_ot",), True)),
-                use_lsd_scaling=bool(
-                    _first_config_value(config, ("use_lsd_scaling",), True)
-                ),
-                use_lsd_gate=bool(_first_config_value(config, ("use_lsd_gate",), True)),
                 action_loss_weights=_first_config_value(
                     config, ("action_loss_weights",), None
                 ),
@@ -257,9 +255,10 @@ class RollFlowActionHead(nn.Module):
         state: Optional[torch.Tensor] = None,
         encoder_attention_mask=None,
         refinement_steps: Optional[int] = None,
+        velocity_mode: str = "average",
         embodiment: Optional[str] = None,
     ) -> torch.Tensor:
-        """Advance the rolling cache and return the next [B,C,A] action chunk."""
+        """Advance the cache with ``average`` or ``instant`` velocity."""
         return self.rollflows[embodiment or self.default_embodiment].step(
             self._predict_velocity,
             batch=vl_embs.shape[0],
@@ -267,6 +266,7 @@ class RollFlowActionHead(nn.Module):
             device=vl_embs.device,
             dtype=self.dtype,
             refinement_steps=refinement_steps,
+            velocity_mode=velocity_mode,
             state_features=self._encode_state(state, embodiment),
             encoder_attention_mask=encoder_attention_mask,
             embodiment=embodiment,

@@ -77,8 +77,8 @@ def test_qwen_rollflow_defaults_are_explicit_and_reproducible():
     assert defaults.action_model["repeated_diffusion_steps"] == 4
     assert defaults.action_model["finite_difference_delta"] == 0.01
     assert defaults.action_model["p_k1"] == 0.7
-    assert defaults.action_model["p_fm"] == 0.5
-    assert defaults.action_model["fm_only_steps"] == 10000
+    assert defaults.action_model["p_fm"] == 0.7
+    assert defaults.action_model["fm_only_steps"] == 30000
     assert "fm_curriculum_steps" not in defaults.action_model
     assert defaults.action_model["inference_steps"] == 4
     assert defaults.action_model["use_ot"] is True

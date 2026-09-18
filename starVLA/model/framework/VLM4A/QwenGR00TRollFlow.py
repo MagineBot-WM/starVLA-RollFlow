@@ -106,14 +106,15 @@ class QwenGR00TRollFlowDefaultConfig:
             # RollFlow objective and randomized grouped-time defaults.
             "finite_difference_delta": 0.01,
             "p_k1": 0.7,
-            # First 10K steps are instantaneous FM, then use a fixed 50/50
-            # instantaneous-FM/LSD sampling mix.
-            "p_fm": 0.5,
-            "fm_only_steps": 10_000,
+            # First 30K steps are instantaneous FM, then use a fixed 70/30
+            # instantaneous-FM/MeanFlow interval mix.
+            "p_fm": 0.7,
+            "fm_only_steps": 30_000,
             "inference_steps": 4,
-            "w_lsd": 0.1,
+            "mf_kv": 1.0,
+            "mf_weight": 0.1,
+            "mf_loss_threshold": 0.5,
             "use_ot": True,
-            "use_lsd_gate": True,
             "clip_velocity": 0.0,
             "iterative_cold_start": True,
             "reset_cache_each_step": False,
@@ -306,6 +307,7 @@ class Qwen_GR00T_RollFlow(baseframework):
                 state,
                 encoder_attention_mask=backbone_attention_mask,
                 refinement_steps=kwargs.get("refinement_steps"),
+                velocity_mode=kwargs.get("velocity_mode", "average"),
                 embodiment=tag,
             )  # (B, chunk_len, action_dim)
 

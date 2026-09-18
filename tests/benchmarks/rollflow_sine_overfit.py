@@ -47,7 +47,8 @@ def make_config() -> SimpleNamespace:
         p_fm=0.3,
         fm_only_steps=0,
         inference_steps=4,
-        w_lsd=0.25,
+        mf_kv=1.0,
+        mf_weight=0.1,
         use_ot=True,
         clip_velocity=0.0,
         iterative_cold_start=True,
@@ -199,7 +200,7 @@ def main() -> None:
             stats = model.last_loss_stats
             print(
                 f"step={step:04d} loss={last_loss:.6f} "
-                f"fm={stats['fm_loss']:.6f} lsd={stats['lsd_loss']:.6f} "
+                f"fm={stats['fm_loss']:.6f} mf={stats['mf_loss']:.6f} "
                 f"G={stats['train_block_size']} groups={stats['num_time_groups']}"
             )
 

@@ -1,4 +1,4 @@
-run_id: libero_rollflow_h64_c8_unfrozen_80k
+run_id: libero_rollflow_h64_c8_unfrozen_rescue15k_baseline_80k
 run_root_dir: /data/tzq/starVLA_checkpoints
 seed: 42
 wandb_entity: your_wandb_entity
@@ -18,18 +18,24 @@ framework:
     max_seq_len: 1024
     action_dim: 7
     state_dim: 0
-    # Predict a 64-step window; return and shift eight steps per rolling call.
     action_horizon: 64
     execution_horizon: 8
     inference_steps: 8
     repeated_diffusion_steps: 4
     finite_difference_delta: 0.01
     p_k1: 0.7
-    fm_only_steps: 0
-    p_fm: 0.7
-    mf_kv: 1.0
-    mf_weight: 0.1
+    # The resumed model is already past the warmup, but keep the schedule
+    # explicit for reproducibility if the run is ever restarted from zero.
+    fm_only_steps: 10000
+    p_fm: 0.5
+    # Gate threshold is unused when use_lsd_gate=false; keep it for matching
+    # the H64 experiment schema.
+    w_lsd: 0.005
+    # Historical stable objective: FM + 0.25 * LSD metric.
+    lsd_weight: 0.25
     use_ot: true
+    use_lsd_scaling: false
+    use_lsd_gate: false
     iterative_cold_start: true
     reset_cache_each_step: false
     num_timestep_buckets: 1000
@@ -63,7 +69,7 @@ datasets:
 
 trainer:
   pretrained_checkpoint: null
-  is_resume: false
+  is_resume: true
   max_train_steps: 80000
   num_warmup_steps: 5000
   save_interval: 5000
@@ -75,7 +81,6 @@ trainer:
   lr_scheduler_type: cosine_with_min_lr
   scheduler_specific_kwargs:
     min_lr: 5.0e-07
-  # Empty freeze pattern: train the VLM, DiT, and action I/O from scratch.
   freeze_modules: ""
   max_grad_norm: 1.0
   weight_decay: 0.0

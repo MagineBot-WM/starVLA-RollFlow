@@ -1,4 +1,6 @@
-"""RollFlow: Flow Matching + Central-Difference Lagrangian Self-Distillation.
+"""RollFlow: Flow Matching + detached MeanFlow interval regularization.
+This is the core implementation of the rolling meanflow matching algorithm.
+Do not delete this file; it is the core of the rolling inference and training algorithm.
 
 Core training algorithm
 -----------------------
@@ -8,37 +10,43 @@ Core training algorithm
     x_t = (1-t) * x0 + t * x1
     v_gt = x1 - x0
 
-    # 2. Build the stop-gradient teacher path for the full batch.
+
+    # 2. Predict interval and instantaneous velocities with one graph-bearing
+    # forward.  ``u_st`` is the average velocity on [s, t], while v_instant is
+    # the diagonal instantaneous prediction at x_t.
+    u_st, v_instant = model(
+        cat(x_s, x_t),
+        cat(s, t),
+        cat(t, t),
+    ).chunk(2)
+
+    # 3. Build a detached MeanFlow target for the interval velocity.  The
+    # finite difference estimates the local change of u_st with terminal time;
+    # ``mf_kv`` bounds the finite-difference derivative component-wise.
     with no_grad:
-        u_st = model(x_s, s, t)
-        X_t_hat = x_s + (t-s) * u_st
-        v_teacher = model(X_t_hat, t, t)
+        u_minus, u_plus = model(
+            cat(x_s, x_s),
+            cat(s, s),
+            cat(t-delta, t+delta),
+        ).chunk(2)
+        du_dt = (u_plus - u_minus) / (2.0 * delta)
 
-    # 3. Pack tangent endpoints and local FM for the full batch.
-    u_minus, u_plus, v_instant = model(
-        cat(x_s, x_s, x_t),
-        cat(s, s, t),
-        cat(t-delta, t+delta, t),
-    ).chunk(3)
-    X_minus = x_s + (t-delta-s) * u_minus
-    X_plus  = x_s + (t+delta-s) * u_plus
-    v_tangent = (X_plus - X_minus) / (2.0*delta)
+    V_mf = u_st + (t - s) * du_dt.clamp(-mf_kv, mf_kv)
 
-    # 4. Compute per-sample losses and apply the optional LSD gate.
-    loss_fm         = MSE(v_instant, v_gt)
-    loss_fm_active  = MSE(v_instant, v_gt, active rows)
-    loss_lsd_metric = MSE(v_tangent, stopgrad(v_teacher), active rows)
-    loss_lsd_raw    = 2*delta * loss_lsd_metric  # optional legacy-safe scaling
-    lsd_budget[b] = w_lsd * stopgrad(loss_fm_active[b])
-    mask[b] = isfinite(loss_lsd_raw[b]) ∧ (loss_lsd_raw[b] ≤ lsd_budget[b])
-    # Accepted sample losses are active-token weighted before the batch mean:
-    #   loss_lsd = sum_b n_b * mask[b] * loss_lsd_raw[b] / sum_b n_b.
-    # ``w_lsd`` controls the gate budget. FM always has coefficient 1.
-    loss_lsd = weighted_mean_by_active_tokens(mask, loss_lsd_raw)
-    loss = loss_fm + loss_lsd
+    # 4. FM is always present; MeanFlow is a weak interval regularizer.
+    loss_fm = MSE(v_instant, v_gt)
+    loss_mf = MSE(V_mf, v_gt)
+    use_mf = isfinite(loss_mf) and (
+        mf_loss_threshold is None or loss_mf <= mf_loss_threshold
+    )
+    loss = loss_fm + mf_weight * (loss_mf if use_mf else 0)
 
-With ``use_lsd_gate=False``, the finite LSD term is added directly and the
-detached FM budget is not used; ``loss_fm_active`` remains a diagnostic only.
+``mf_loss_threshold`` is an optional batch-level safety gate.  If the raw
+interval loss exceeds the threshold (or is non-finite), the MeanFlow term is
+set to zero for that update; FM remains unchanged and always trains.  The
+default threshold is ``0.5``; set it to ``None`` to disable the gate.
+
+
 
 Time convention
 ---------------
@@ -69,23 +77,13 @@ Time sampling
 Training samples K from the divisors of M=H/C.  K=1 is favoured, while the
 remaining choices share the residual probability.  K independently sorted
 target times are expanded over equal action blocks, and one source ratio per
-sample gives s=ratio*t.  The first ``fm_only_steps`` (default 10,000) are
+sample gives s=ratio*t.  The first ``fm_only_steps`` (default 30,000) are
 diagonal instantaneous FM; afterwards the sampler switches directly to the
 fixed ``p_fm`` mixture.  Deployment still uses the exact rolling staircase
 needed for cache alignment.
-When a batch is entirely diagonal (including FM warmup), the teacher and
-tangent forwards are skipped; one local FM forward is sufficient and LSD is a
+When a batch is entirely diagonal (including FM warmup), the interval forward
+is skipped; one local FM forward is sufficient and the interval regularizer is
 zero; FM retains the training graph.
-
-The LSD estimator is the packed central difference above.  The optional gate is
-sample-wise: each sample first aggregates its own active tokens, then compares
-its finite LSD value against its own detached FM budget.  Samples with no
-active tokens, non-finite LSD, or an over-budget LSD contribute no LSD
-gradient; accepted samples are combined using their active-token counts so
-that the all-accepted case has exactly the same scale as the global MSE.
-There is no CSF,
-split loss, persistent training cache, or adjacent-window training sampler.
-Rolling state exists only at inference.
 """
 
 from __future__ import annotations
@@ -98,6 +96,9 @@ import torch
 from torch import Tensor, nn
 
 
+_VELOCITY_MODES = ("average", "instant")
+
+
 @dataclass
 class RollFlowConfig:
     horizon: int
@@ -106,12 +107,15 @@ class RollFlowConfig:
     finite_difference_delta: float = 0.01
     inference_steps: Optional[int] = None
     p_k1: float = 0.7
-    p_fm: float = 0.5
-    fm_only_steps: int = 10_000
-    w_lsd: float = 0.1
+    p_fm: float = 0.7
+    fm_only_steps: int = 30_000
+    # Component-wise clamp for the detached terminal-time derivative.
+    mf_kv: float = 1.0
+    mf_weight: float = 0.1
+    # Disable the interval regularizer for abnormal batches.  ``None`` keeps
+    # the historical ungated objective.
+    mf_loss_threshold: Optional[float] = 0.5
     use_ot: bool = True
-    use_lsd_scaling: bool = True
-    use_lsd_gate: bool = True
     action_loss_weights: Optional[Sequence[float]] = None
     clip_velocity: float = 0.0
     iterative_cold_start: bool = False
@@ -126,8 +130,13 @@ class RollFlowConfig:
             raise ValueError("finite_difference_delta must lie in (0, 0.5)")
         if not 0 <= self.p_k1 <= 1 or not 0 <= self.p_fm <= 1:
             raise ValueError("p_k1 and p_fm must lie in [0, 1]")
-        if any(not math.isfinite(v) or v < 0 for v in (self.w_lsd, self.clip_velocity, self.fm_only_steps)):
-            raise ValueError("w_lsd/clip_velocity/fm_only_steps must be finite and non-negative")
+        numeric = (self.mf_kv, self.mf_weight, self.clip_velocity, self.fm_only_steps)
+        if any(not math.isfinite(value) or value < 0 for value in numeric):
+            raise ValueError(
+                "mf_kv/mf_weight/clip_velocity/fm_only_steps must be finite "
+                "and non-negative"
+            )
+        _validate_mf_loss_threshold(self.mf_loss_threshold)
         if not self.valid_steps(self.steps):
             raise ValueError(f"inference_steps must lie in [1,{self.num_chunks}]")
         if self.action_loss_weights is not None:
@@ -211,15 +220,26 @@ def central_difference_lsd(
     active: Optional[Tensor] = None,
     context: Optional[Tensor] = None,
     pad: Optional[Tensor] = None,
-    w_lsd: float = 0.1,
-    use_lsd_scaling: bool = True,
-    use_lsd_gate: bool = True,
+    mf_kv: float = 1.0,
+    mf_weight: float = 0.1,
+    mf_loss_threshold: Optional[float] = 0.5,
     action_loss_weights: Optional[Tensor] = None,
     model_kwargs: Optional[dict[str, Any]] = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
-    """FM everywhere; LSD only on valid off-diagonal intervals."""
+    """Train instantaneous FM and the detached MeanFlow interval objective."""
     kwargs = model_kwargs or {}
-    _validate_inputs(x0, x1, s, t, active, pad, delta, w_lsd)
+    _validate_inputs(
+        x0,
+        x1,
+        s,
+        t,
+        active,
+        pad,
+        delta,
+        mf_kv,
+        mf_weight,
+        mf_loss_threshold,
+    )
     valid = torch.ones_like(s[..., 0], dtype=torch.bool) if pad is None else ~pad.bool()
     active = _lsd_mask(s, t, delta) if active is None else active.bool()
     _validate_times(s, t, delta, active)
@@ -229,107 +249,99 @@ def central_difference_lsd(
     v_gt = x1.float() - x0.float()
     _require_finite(v_gt, "RollFlow ground truth")
 
-    # FM-only batch (warmup or sampled diagonal).
-    if not bool(active.any()):
+    # FM-only batch (warmup, sampled diagonal, or disabled MeanFlow).
+    if mf_weight == 0 or not bool(active.any()):
         v = _predict(model, x_t, t, t, context, kwargs)
-        loss_fm = _masked_token_mean(_token_mse(v - v_gt, action_loss_weights), valid)
-        zero_tokens = torch.zeros_like(valid, dtype=loss_fm.dtype)
-        loss_lsd, stats = _gated_lsd(
-            zero_tokens,
-            zero_tokens,
-            active.squeeze(-1),
-            scale=2 * delta if use_lsd_scaling else 1.0,
-            budget_ratio=w_lsd,
-            use_gate=use_lsd_gate,
+        loss_fm = masked_mse(
+            v - v_gt, valid=valid, action_loss_weights=action_loss_weights
         )
-        return loss_fm, _stats(loss_fm, loss_lsd, active, stats, use_lsd_scaling)
+        return loss_fm, _stats(
+            loss_fm,
+            loss_fm.new_zeros(()),
+            loss_fm.new_zeros(()),
+            active,
+            mf_weight,
+            False,
+        )
 
     x_s = lerp_path(x0, x1, s)
 
-    # Stop-gradient teacher at the predicted terminal state.
-    with torch.no_grad():
-        u = _predict(model, x_s, s, t, context, kwargs)
-        x_hat_t = flow_map(x_s, s, t, u)
-        v_teacher = _predict(model, x_hat_t, t, t, context, kwargs)
-        _require_finite(v_teacher, "RollFlow teacher prediction")
-    del u, x_hat_t
+    # Graph-bearing interval prediction and diagonal instantaneous FM.
+    B = x0.shape[0]
+    u_st, v_instant = _predict(
+        model,
+        torch.cat((x_s, x_t)),
+        torch.cat((s, t)),
+        torch.cat((t, t)),
+        repeat_batch(context, 2, B),
+        repeat_batch(kwargs, 2, B),
+    ).chunk(2)
 
-    # Left / right finite-difference endpoints + local FM in one packed forward.
+    # Detached finite-difference derivative.  Only u_st in V_mf carries the
+    # training graph; endpoint predictions are used as a stop-gradient
+    # correction estimate exactly as in the MeanFlow identity.
     t_minus = torch.where(active, t - delta, t)
     t_plus = torch.where(active, t + delta, t)
-    B = x0.shape[0]
-    u_minus, u_plus, v_local = _predict(
-        model,
-        torch.cat((x_s, x_s, x_t)),
-        torch.cat((s, s, t)),
-        torch.cat((t_minus, t_plus, t)),
-        repeat_batch(context, 3, B),
-        repeat_batch(kwargs, 3, B),
-    ).chunk(3)
-
-    x_minus = flow_map(x_s, s, t_minus, u_minus)
-    x_plus = flow_map(x_s, s, t_plus, u_plus)
-    v_tangent = (x_plus - x_minus) / (2 * delta)
-
-    fm_tokens = _token_mse(v_local - v_gt, action_loss_weights)
-    lsd_tokens = _token_mse(v_tangent - v_teacher.detach(), action_loss_weights)
-    loss_fm = _masked_token_mean(fm_tokens, valid)
-    loss_lsd, stats = _gated_lsd(
-        fm_tokens,
-        lsd_tokens,
-        active.squeeze(-1),
-        scale=2 * delta if use_lsd_scaling else 1.0,
-        budget_ratio=w_lsd,
-        use_gate=use_lsd_gate,
-    )
-    return loss_fm + loss_lsd, _stats(loss_fm, loss_lsd, active, stats, use_lsd_scaling)
-
-
-def _gated_lsd(fm_tokens, lsd_tokens, active, *, scale, budget_ratio, use_gate):
-    counts = active.sum(1).to(fm_tokens.dtype)
-    total = counts.sum().clamp_min(1)
-
-    fm = torch.where(active, fm_tokens, 0).sum(1) / counts.clamp_min(1)
-    loss_lsd_metric = torch.where(active, lsd_tokens, 0).sum(1) / counts.clamp_min(1)
-    loss_lsd_raw = scale * loss_lsd_metric
-    budget = budget_ratio * fm.detach()
-
-    has_active = counts > 0
-    finite = torch.isfinite(loss_lsd_raw) & has_active
-    keep = finite & (loss_lsd_raw <= budget) if use_gate else finite
-    accepted = torch.where(keep, torch.nan_to_num(loss_lsd_raw, nan=0.0, posinf=0.0, neginf=0.0), 0)
-    loss_lsd = (accepted * counts).sum() / total
     with torch.no_grad():
-        sample_count = has_active.sum().clamp_min(1)
-        stats = {
-            "fm_loss_active": (fm * counts).sum() / total,
-            "lsd_loss_metric": (loss_lsd_metric * counts).sum() / total,
-            "lsd_loss_raw": (loss_lsd_raw * counts).sum() / total,
-            "lsd_budget": (budget * counts).sum() / total,
-            "lsd_gate_enabled": fm.new_tensor(float(use_gate)),
-            "lsd_gate_active": (has_active & ~keep).sum() / sample_count,
-            "lsd_finite_frac": finite.sum() / sample_count,
-            "lsd_keep_frac": keep.sum() / sample_count,
-            "lsd_keep_token_frac": (keep * counts).sum() / total,
-            "lsd_active_sample_frac": has_active.float().mean(),
-            "fm_loss_active_per_sample": fm,
-            "lsd_loss_raw_per_sample": loss_lsd_raw,
-            "lsd_loss_per_sample": accepted,
-            "lsd_budget_per_sample": budget,
-            "lsd_active_per_sample": has_active,
-            "lsd_finite_per_sample": finite,
-            "lsd_keep_per_sample": keep,
-        }
-    return loss_lsd, {k: v.detach() for k, v in stats.items()}
+        u_minus, u_plus = _predict(
+            model,
+            torch.cat((x_s, x_s)),
+            torch.cat((s, s)),
+            torch.cat((t_minus, t_plus)),
+            repeat_batch(context, 2, B),
+            repeat_batch(kwargs, 2, B),
+        ).chunk(2)
+        du_dt = (u_plus - u_minus) / (2.0 * delta)
+        du_dt = du_dt.clamp(min=-mf_kv, max=mf_kv)
+
+    # Keep this expression outside no_grad: the MF loss must update u_st.
+    v_mf = u_st + (t - s) * du_dt
+
+    # One direct mean over the selected action elements.
+    loss_fm = masked_mse(
+        v_instant - v_gt, valid=valid, action_loss_weights=action_loss_weights
+    )
+    loss_mf = masked_mse(
+        v_mf - v_gt,
+        valid=active.squeeze(-1),
+        action_loss_weights=action_loss_weights,
+    )
+
+    # Gate the raw batch MeanFlow scalar before applying its weight.  The
+    # decision is detached, so an abnormal interval objective contributes
+    # exactly zero MF gradient while the FM anchor remains untouched.
+    mf_gate_active = torch.isfinite(loss_mf.detach())
+    if mf_loss_threshold is not None:
+        mf_gate_active &= loss_mf.detach() <= float(mf_loss_threshold)
+    mf_loss_used = torch.nan_to_num(loss_mf, nan=0.0, posinf=0.0, neginf=0.0)
+    mf_loss_used = mf_loss_used * mf_gate_active.to(mf_loss_used.dtype)
+    loss = loss_fm + mf_weight * mf_loss_used
+
+    return loss, _stats(
+        loss_fm,
+        loss_mf,
+        mf_loss_used,
+        active,
+        mf_weight,
+        bool(mf_gate_active),
+    )
 
 
-def _stats(fm: Tensor, lsd: Tensor, active: Tensor, gate_stats: dict, scaling: bool):
+def _stats(
+    fm: Tensor,
+    mf: Tensor,
+    mf_used: Tensor,
+    active: Tensor,
+    weight: float,
+    gate_active: bool,
+):
+    """Build the few metrics needed to monitor the two loss terms."""
     return {
-        **gate_stats,
         "fm_loss": fm.detach(),
-        "lsd_loss": lsd.detach(),
-        "active_lsd_frac": active.float().mean().detach(),
-        "lsd_scaling_enabled": fm.new_tensor(float(scaling)),
+        "mf_loss": mf.detach(),
+        "mf_loss_weighted": (weight * mf_used).detach(),
+        "active_mf_frac": active.float().mean().detach(),
+        "mf_gate_active": fm.new_tensor(float(gate_active)),
     }
 
 
@@ -370,7 +382,13 @@ class StaircaseTimeSampler:
         t = t_group.repeat_interleave(repeat, 1)
         s = (ratio * t_group).repeat_interleave(repeat, 1)
         return TrainingTimes(
-            s, t, _lsd_mask(s, t, self.cfg.finite_difference_delta), K, self.cfg.num_chunks // K, ratio, fm_mask
+            s,
+            t,
+            _lsd_mask(s, t, self.cfg.finite_difference_delta),
+            K,
+            self.cfg.num_chunks // K,
+            ratio,
+            fm_mask,
         )
 
     def deployment(
@@ -412,6 +430,7 @@ class RollFlow:
         self.time = StaircaseTimeSampler(cfg)
         self._cache: Optional[Tensor] = None
         self._cache_steps: Optional[int] = None
+        self._cache_mode: Optional[str] = None
 
     def loss(self, model, x, step=0, context=None, pad=None, **model_kwargs):
         self._check_actions(x)
@@ -440,9 +459,9 @@ class RollFlow:
             active=times.active,
             context=context,
             pad=pad,
-            w_lsd=self.cfg.w_lsd,
-            use_lsd_scaling=self.cfg.use_lsd_scaling,
-            use_lsd_gate=self.cfg.use_lsd_gate,
+            mf_kv=self.cfg.mf_kv,
+            mf_weight=self.cfg.mf_weight,
+            mf_loss_threshold=self.cfg.mf_loss_threshold,
             action_loss_weights=weights,
             model_kwargs=model_kwargs,
         )
@@ -463,7 +482,27 @@ class RollFlow:
         return loss, stats
 
     @torch.no_grad()
-    def step(self, model, batch, context=None, *, device=None, dtype=None, refinement_steps=None, **model_kwargs):
+    def step(
+        self,
+        model,
+        batch,
+        context=None,
+        *,
+        device=None,
+        dtype=None,
+        refinement_steps=None,
+        velocity_mode="average",
+        **model_kwargs,
+    ):
+        """Advance the rolling cache using interval or instantaneous velocity.
+
+        ``average`` preserves the original query ``model(z, s, t)``.  In
+        ``instant`` mode the model is queried at the current source time,
+        ``model(z, s, s)``, while the same interval ``t-s`` is still used for
+        the Euler update.
+        """
+        if velocity_mode not in _VELOCITY_MODES:
+            raise ValueError("velocity_mode must be 'average' or 'instant'")
         K = self.cfg.steps if refinement_steps is None else int(refinement_steps)
         if not self.cfg.valid_steps(K):
             raise ValueError(f"refinement_steps must lie in [1,{self.cfg.num_chunks}]")
@@ -471,27 +510,40 @@ class RollFlow:
         device, dtype = infer_device_dtype(model, context, device, dtype)
         if self.cfg.reset_cache_each_step:
             self.reset()
+        elif self._cache is not None and self._cache_mode != velocity_mode:
+            # Do not mix trajectories generated with different velocity
+            # parameterizations when the caller switches modes.
+            self.reset()
 
         z, cold = self._rolling_input(batch, device, dtype, K)
         times = self.time.deployment(batch, refinement_steps=K, cold=cold, device=device)
 
         if cold and self.cfg.iterative_cold_start:
-            cache = self._iterative_cold_start(model, z, times.t, K, context, model_kwargs, dtype)
+            cache = self._iterative_cold_start(
+                model, z, times.t, K, context, model_kwargs, dtype, velocity_mode
+            )
         else:
-            v = self._velocity(model, z, times.s, times.t, context, model_kwargs)
+            query_t = _velocity_query_time(times.s, times.t, velocity_mode)
+            v = self._velocity(model, z, times.s, query_t, context, model_kwargs)
             cache = flow_map(z, times.s, times.t, v).to(dtype)
 
-        self._cache, self._cache_steps = cache.detach(), K
+        self._cache, self._cache_steps, self._cache_mode = cache.detach(), K, velocity_mode
         return self._cache[:, : self.cfg.chunk_size].clone()
 
     def reset(self):
         self._cache = self._cache_steps = None
+        self._cache_mode = None
 
     @property
     def cache_info(self):
         if self._cache is None:
             return None
-        return RollFlowCacheInfo(tuple(self._cache.shape), self._cache_steps, self._cache.device, self._cache.dtype)
+        return RollFlowCacheInfo(
+            tuple(self._cache.shape),
+            self._cache_steps,
+            self._cache.device,
+            self._cache.dtype,
+        )
 
     def _rolling_input(self, batch, device, dtype, K):
         shape = (batch, self.cfg.horizon, self.cfg.action_dim)
@@ -504,7 +556,9 @@ class RollFlow:
         )
         if not ok:
             return torch.randn(shape, device=device, dtype=dtype), True
-        tail = torch.randn(batch, self.cfg.chunk_size, self.cfg.action_dim, device=device, dtype=dtype)
+        tail = torch.randn(
+            batch, self.cfg.chunk_size, self.cfg.action_dim, device=device, dtype=dtype
+        )
         return torch.cat((self._cache[:, self.cfg.chunk_size :], tail), 1), False
 
     def _velocity(self, model, z, s, t, context, kwargs):
@@ -512,11 +566,16 @@ class RollFlow:
         c = self.cfg.clip_velocity
         return v if c <= 0 else c * torch.tanh(v / c)
 
-    def _iterative_cold_start(self, model, z, final_t, K, context, kwargs, dtype):
+    def _iterative_cold_start(
+        self, model, z, final_t, K, context, kwargs, dtype, velocity_mode
+    ):
         s = torch.zeros_like(final_t)
         for i in range(1, K + 1):
             t = torch.minimum(final_t, torch.full_like(final_t, i / K))
-            z = flow_map(z, s, t, self._velocity(model, z, s, t, context, kwargs)).to(dtype)
+            query_t = _velocity_query_time(s, t, velocity_mode)
+            z = flow_map(
+                z, s, t, self._velocity(model, z, s, query_t, context, kwargs)
+            ).to(dtype)
             s = t
         return z
 
@@ -533,11 +592,23 @@ def _require_finite(value: Tensor, name: str) -> None:
         raise FloatingPointError(f"Nonfinite {name}")
 
 
-def _validate_inputs(x0, x1, s, t, active, pad, delta, w_lsd):
+def _validate_inputs(
+    x0,
+    x1,
+    s,
+    t,
+    active,
+    pad,
+    delta,
+    mf_kv,
+    mf_weight,
+    mf_loss_threshold,
+):
     if not 0 < delta < 0.5:
         raise ValueError("delta must lie in (0, 0.5)")
-    if not math.isfinite(w_lsd) or w_lsd < 0:
-        raise ValueError("w_lsd must be finite and non-negative")
+    if any(not math.isfinite(v) or v < 0 for v in (mf_kv, mf_weight)):
+        raise ValueError("mf_kv and mf_weight must be finite and non-negative")
+    _validate_mf_loss_threshold(mf_loss_threshold)
     if x0.ndim != 3 or x0.shape != x1.shape:
         raise ValueError("x0 and x1 must have identical [B,H,A] shapes")
     shape = (*x0.shape[:2], 1)
@@ -549,13 +620,18 @@ def _validate_inputs(x0, x1, s, t, active, pad, delta, w_lsd):
         raise ValueError("pad must have shape [B,H]")
 
 
+def _validate_mf_loss_threshold(threshold: Optional[float]) -> None:
+    if threshold is not None and (not math.isfinite(threshold) or threshold < 0):
+        raise ValueError("mf_loss_threshold must be finite and non-negative or None")
+
+
 def _validate_times(s: Tensor, t: Tensor, delta: float, active: Tensor) -> None:
     _require_finite(s, "source times")
     _require_finite(t, "target times")
     if s.shape != t.shape or bool(((s < -1e-6) | (t > 1 + 1e-6) | (s > t + 1e-6)).any()):
         raise ValueError("require matching s and t with 0 <= s <= t <= 1")
     if bool((active & ~_lsd_mask(s, t, delta)).any()):
-        raise ValueError("active LSD tokens require s < t-delta and t+delta <= 1")
+        raise ValueError("active interval tokens require s < t-delta and t+delta <= 1")
 
 
 def masked_mse(error: Tensor, *, pad=None, valid=None, action_loss_weights=None) -> Tensor:
@@ -564,25 +640,22 @@ def masked_mse(error: Tensor, *, pad=None, valid=None, action_loss_weights=None)
         mask = mask & ~pad.bool()
     if valid is not None:
         mask = mask & (valid.squeeze(-1) if valid.ndim == 3 else valid).bool()
-    return _masked_token_mean(_token_mse(error, action_loss_weights), mask)
+    sq = error.float().square()
+    if not bool(mask.any()):
+        return sq.sum() * 0.0
+    if action_loss_weights is None:
+        return sq[mask].mean()
+    weights = torch.as_tensor(
+        action_loss_weights, device=error.device, dtype=sq.dtype
+    )
+    if weights.shape != (error.shape[-1],):
+        raise ValueError("action_loss_weights must have shape [action_dim]")
+    denominator = (mask.sum() * weights.sum()).clamp_min(1e-12)
+    return (sq[mask] * weights).sum() / denominator
 
 
 def _lsd_mask(s: Tensor, t: Tensor, delta: float) -> Tensor:
     return ((t - s) > delta + 1e-6) & (t + delta <= 1 - 1e-6)
-
-
-def _token_mse(error: Tensor, weights: Optional[Tensor]) -> Tensor:
-    sq = error.float().square()
-    if weights is None:
-        return sq.mean(-1)
-    w = weights.to(error.device, sq.dtype)
-    if w.shape != (error.shape[-1],):
-        raise ValueError("action_loss_weights must have shape [action_dim]")
-    return (sq * w).sum(-1) / w.sum().clamp_min(1e-12)
-
-
-def _masked_token_mean(values: Tensor, mask: Tensor) -> Tensor:
-    return torch.where(mask, values, 0).sum() / mask.sum().clamp_min(1)
 
 
 def _predict(model, z, s, t, context, kwargs):
@@ -590,6 +663,11 @@ def _predict(model, z, s, t, context, kwargs):
     if out.shape != z.shape:
         raise ValueError(f"model output {tuple(out.shape)} must match z {tuple(z.shape)}")
     return out
+
+
+def _velocity_query_time(source_time: Tensor, target_time: Tensor, mode: str) -> Tensor:
+    """Select the time argument for the inference velocity query."""
+    return target_time if mode == "average" else source_time
 
 
 def repeat_batch(value: Any, repeats: int, batch: int) -> Any:

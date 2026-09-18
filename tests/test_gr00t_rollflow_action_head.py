@@ -37,7 +37,8 @@ def _config(**overrides):
         "p_fm": 0.0,
         "fm_only_steps": 0,
         "inference_steps": 2,
-        "w_lsd": 0.5,
+        "mf_kv": 1.0,
+        "mf_weight": 0.1,
         "use_ot": False,
         "clip_velocity": 0.0,
         "iterative_cold_start": False,
@@ -197,10 +198,11 @@ def test_config_defaults_and_legacy_gr00t_checkpoint_loading():
     assert defaults.to_dict()["finite_difference_delta"] == 0.01
     assert defaults.to_dict()["use_ot"] is True
     assert defaults.to_dict()["p_k1"] == 0.7
-    assert defaults.to_dict()["p_fm"] == 0.5
-    assert defaults.to_dict()["fm_only_steps"] == 10000
+    assert defaults.to_dict()["p_fm"] == 0.7
+    assert defaults.to_dict()["fm_only_steps"] == 30000
     assert "fm_curriculum_steps" not in defaults.to_dict()
-    assert defaults.to_dict()["w_lsd"] == 0.1
+    assert defaults.to_dict()["mf_kv"] == 1.0
+    assert defaults.to_dict()["mf_weight"] == 0.1
 
     diffusion_cfg = _config().framework.action_model.diffusion_model_cfg.copy()
     diffusion_cfg.update(num_attention_heads=12, attention_head_dim=64, num_layers=1)

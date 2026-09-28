@@ -396,17 +396,32 @@ class VLATrainer(TrainerUtils):
                     }
                 )
 
-            if self.completed_steps % self.config.trainer.eval_interval == 0:
+            # `completed_steps` only advances on synchronized optimizer steps.
+            # During gradient accumulation it therefore stays on the previous
+            # value for intermediate microbatches; gate step-based work on the
+            # same boundary to avoid duplicate evals, logs, and checkpoint saves.
+            if (
+                self.accelerator.sync_gradients
+                and self.completed_steps % self.config.trainer.eval_interval == 0
+            ):
                 step_metrics = self.eval_action_model(step_metrics)
 
             step_metrics["timing/data"] = t_end_data - t_start_data
             step_metrics["timing/model"] = t_end_model - t_start_model
-            self._log_metrics(step_metrics)
+            if self.accelerator.sync_gradients:
+                self._log_metrics(step_metrics)
 
-            if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
+            if (
+                self.accelerator.sync_gradients
+                and self.completed_steps % self.config.trainer.save_interval == 0
+                and self.completed_steps > 0
+            ):
                 self._save_checkpoint()
 
-            if self.completed_steps >= self.config.trainer.max_train_steps:
+            if (
+                self.accelerator.sync_gradients
+                and self.completed_steps >= self.config.trainer.max_train_steps
+            ):
                 break
 
         self._finalize_training()
@@ -439,9 +454,16 @@ class VLATrainer(TrainerUtils):
                 np.asarray(actions),
                 action_horizon,
             )
-            step_metrics["mse_score"] = float(
-                np.mean(np.square(normalized_actions - targets))
-            )
+            squared_error = np.square(normalized_actions - targets)
+            if all("action_padding_mask" in example for example in examples):
+                padding_masks = np.asarray([example["action_padding_mask"] for example in examples])
+                valid = ~padding_masks[:, -action_horizon:][:, : normalized_actions.shape[1]]
+                expanded_valid = valid[..., None]
+                squared_error = np.where(expanded_valid, squared_error, 0.0)
+                denominator = max(int(valid.sum()) * normalized_actions.shape[-1], 1)
+                step_metrics["mse_score"] = float(squared_error.sum() / denominator)
+            else:
+                step_metrics["mse_score"] = float(np.mean(squared_error))
 
         del examples
         if dist.is_initialized():
@@ -484,6 +506,13 @@ class VLATrainer(TrainerUtils):
                 self.lr_scheduler.step()
 
         metrics = {"action_dit_loss": action_loss.item()}
+        action_metrics = output_dict.get("action_metrics", {})
+        if isinstance(action_metrics, dict):
+            for name, value in action_metrics.items():
+                if value is not None:
+                    if torch.is_tensor(value):
+                        value = value.detach().float().mean().item()
+                    metrics[f"qwengroot/{name}"] = float(value)
         rollflow_metrics = output_dict.get("rollflow_metrics", {})
         for name in (
             "fm_loss",

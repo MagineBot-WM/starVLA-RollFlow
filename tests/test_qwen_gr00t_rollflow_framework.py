@@ -7,6 +7,8 @@ from PIL import Image
 from torch import nn
 
 import starVLA.model.framework.VLM4A.QwenGR00TRollFlow as rollflow_framework
+import starVLA.model.framework.VLM4A.QwenGR00TRollingFlow as rolling_flow_framework
+from starVLA.model.modules.action_model.GR00T_ActionHeader import DiTConfig
 
 
 class _TinyBackbone(nn.Module):
@@ -56,6 +58,7 @@ def _tiny_framework_config():
                     "p_fm": 0.0,
                     "fm_curriculum_steps": 0,
                     "inference_steps": 2,
+                    "num_inference_timesteps": 2,
                     "diffusion_model_cfg": {
                         "num_attention_heads": 2,
                         "attention_head_dim": 8,
@@ -160,3 +163,46 @@ def test_qwen_rollflow_converts_bfloat16_predictions_to_numpy(monkeypatch):
 
     assert prediction.dtype == np.float32
     np.testing.assert_array_equal(prediction, np.ones((1, 2, 3), dtype=np.float32))
+
+
+def test_qwen_rolling_flow_uses_groot_and_has_no_distillation_config(monkeypatch):
+    defaults = rolling_flow_framework.QwenGR00TRollingFlowDefaultConfig()
+    assert defaults.name == "QwenGR00TRollingFlow"
+    assert issubclass(rolling_flow_framework.Qwen_GR00T_RollingFlow, rolling_flow_framework.Qwen_GR00T)
+    assert not issubclass(
+        rolling_flow_framework.Qwen_GR00T_RollingFlow,
+        rollflow_framework.Qwen_GR00T_RollFlow,
+    )
+    assert "p_fm" not in defaults.action_model
+    assert "w_lsd" not in defaults.action_model
+    assert "fm_curriculum_steps" not in defaults.action_model
+    assert defaults.action_model["use_ot"] is True
+
+    monkeypatch.setitem(
+        DiTConfig,
+        "DiT-B",
+        {"input_embedding_dim": 16, "attention_head_dim": 8, "num_attention_heads": 2},
+    )
+    monkeypatch.setattr(rolling_flow_framework, "get_vlm_model", lambda config: _TinyVLM())
+    config = _tiny_framework_config()
+    config.framework.name = "QwenGR00TRollingFlow"
+    config.framework.action_model.p_k1 = 1.0
+    config.framework.action_model.use_ot = False
+    model = rolling_flow_framework.Qwen_GR00T_RollingFlow(config)
+
+    image = Image.fromarray(np.zeros((16, 16, 3), dtype=np.uint8))
+    example = {
+        "action": np.zeros((4, 3), dtype=np.float32),
+        "image": [image],
+        "lang": "rolling flow test",
+        "state": np.zeros((1, 2), dtype=np.float32),
+    }
+    loss = model([example])["action_loss"]
+    assert torch.isfinite(loss)
+    assert "lsd_loss" not in model.action_model.last_loss_stats
+    loss.backward()
+
+    model.eval()
+    prediction = model.predict_action([example], refinement_steps=2)["normalized_actions"]
+    assert prediction.shape == (1, 2, 3)
+    assert np.isfinite(prediction).all()

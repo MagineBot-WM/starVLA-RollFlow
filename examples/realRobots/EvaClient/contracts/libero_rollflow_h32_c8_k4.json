@@ -1,0 +1,21 @@
+{
+  "name": "libero_rollflow_h32_c8_k4",
+  "protocol": "starvla_eva_contract_v1",
+  "robot": "libero_franka",
+  "cameras": [
+    {"eva_key": "agentview", "training_key": "video.primary_image"},
+    {"eva_key": "wrist", "training_key": "video.wrist_image"}
+  ],
+  "image": {"hw": [224, 224], "color": "rgb", "resize": "direct", "interpolation": "bilinear", "rotate_180": true},
+  "state": {"include": false, "raw_dim": 0, "fields": []},
+  "action": {
+    "mode": "joint",
+    "semantics": "libero_cartesian_delta",
+    "dim": 7,
+    "chunk_size": 8,
+    "unnorm_key": "franka",
+    "training_keys": ["action.x", "action.y", "action.z", "action.roll", "action.pitch", "action.yaw", "action.gripper"]
+  },
+  "model": {"framework": "QwenGR00TRollFlow", "horizon": 32, "inference_steps": 4},
+  "inference_kwargs": {}
+}

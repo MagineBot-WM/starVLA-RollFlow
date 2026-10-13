@@ -1,0 +1,235 @@
+{
+  "selection_reason": "Completed 500-trial-per-suite results; both selected LIBERO Goal tasks historically 49/50. Matches saved H32/C8/K4 config without decoder overrides.",
+  "checkpoint": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt",
+  "size_bytes": 2499974667,
+  "prior_suites": {
+    "libero_goal": {
+      "log": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/results/libero_goal/steps_55000_pytorch_model.pt/eval.log",
+      "success_rate": 0.896,
+      "episodes": 500,
+      "per_task": {
+        "open the middle drawer of the cabinet": {
+          "episodes": 50,
+          "successes": 49,
+          "success_rate": 0.98
+        },
+        "put the bowl on the stove": {
+          "episodes": 50,
+          "successes": 49,
+          "success_rate": 0.98
+        },
+        "put the wine bottle on top of the cabinet": {
+          "episodes": 50,
+          "successes": 41,
+          "success_rate": 0.82
+        },
+        "open the top drawer and put the bowl inside": {
+          "episodes": 50,
+          "successes": 39,
+          "success_rate": 0.78
+        },
+        "put the bowl on top of the cabinet": {
+          "episodes": 50,
+          "successes": 48,
+          "success_rate": 0.96
+        },
+        "push the plate to the front of the stove": {
+          "episodes": 50,
+          "successes": 47,
+          "success_rate": 0.94
+        },
+        "put the cream cheese in the bowl": {
+          "episodes": 50,
+          "successes": 42,
+          "success_rate": 0.84
+        },
+        "turn on the stove": {
+          "episodes": 50,
+          "successes": 50,
+          "success_rate": 1.0
+        },
+        "put the bowl on the plate": {
+          "episodes": 50,
+          "successes": 40,
+          "success_rate": 0.8
+        },
+        "put the wine bottle on the rack": {
+          "episodes": 50,
+          "successes": 43,
+          "success_rate": 0.86
+        }
+      }
+    },
+    "libero_object": {
+      "log": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/results/libero_object/steps_55000_pytorch_model.pt/eval.log",
+      "success_rate": 0.902,
+      "episodes": 500,
+      "per_task": {
+        "pick up the alphabet soup and place it in the basket": {
+          "episodes": 50,
+          "successes": 47,
+          "success_rate": 0.94
+        },
+        "pick up the cream cheese and place it in the basket": {
+          "episodes": 50,
+          "successes": 41,
+          "success_rate": 0.82
+        },
+        "pick up the salad dressing and place it in the basket": {
+          "episodes": 50,
+          "successes": 45,
+          "success_rate": 0.9
+        },
+        "pick up the bbq sauce and place it in the basket": {
+          "episodes": 50,
+          "successes": 45,
+          "success_rate": 0.9
+        },
+        "pick up the ketchup and place it in the basket": {
+          "episodes": 50,
+          "successes": 50,
+          "success_rate": 1.0
+        },
+        "pick up the tomato sauce and place it in the basket": {
+          "episodes": 50,
+          "successes": 40,
+          "success_rate": 0.8
+        },
+        "pick up the butter and place it in the basket": {
+          "episodes": 50,
+          "successes": 45,
+          "success_rate": 0.9
+        },
+        "pick up the milk and place it in the basket": {
+          "episodes": 50,
+          "successes": 46,
+          "success_rate": 0.92
+        },
+        "pick up the chocolate pudding and place it in the basket": {
+          "episodes": 50,
+          "successes": 49,
+          "success_rate": 0.98
+        },
+        "pick up the orange juice and place it in the basket": {
+          "episodes": 50,
+          "successes": 43,
+          "success_rate": 0.86
+        }
+      }
+    },
+    "libero_spatial": {
+      "log": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/results/libero_spatial/steps_55000_pytorch_model.pt/eval.log",
+      "success_rate": 0.778,
+      "episodes": 500,
+      "per_task": {
+        "pick up the black bowl between the plate and the ramekin and place it on the plate": {
+          "episodes": 50,
+          "successes": 47,
+          "success_rate": 0.94
+        },
+        "pick up the black bowl next to the ramekin and place it on the plate": {
+          "episodes": 50,
+          "successes": 37,
+          "success_rate": 0.74
+        },
+        "pick up the black bowl from table center and place it on the plate": {
+          "episodes": 50,
+          "successes": 50,
+          "success_rate": 1.0
+        },
+        "pick up the black bowl on the cookie box and place it on the plate": {
+          "episodes": 50,
+          "successes": 38,
+          "success_rate": 0.76
+        },
+        "pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate": {
+          "episodes": 50,
+          "successes": 45,
+          "success_rate": 0.9
+        },
+        "pick up the black bowl on the ramekin and place it on the plate": {
+          "episodes": 50,
+          "successes": 13,
+          "success_rate": 0.26
+        },
+        "pick up the black bowl next to the cookie box and place it on the plate": {
+          "episodes": 50,
+          "successes": 46,
+          "success_rate": 0.92
+        },
+        "pick up the black bowl on the stove and place it on the plate": {
+          "episodes": 50,
+          "successes": 42,
+          "success_rate": 0.84
+        },
+        "pick up the black bowl next to the plate and place it on the plate": {
+          "episodes": 50,
+          "successes": 36,
+          "success_rate": 0.72
+        },
+        "pick up the black bowl on the wooden cabinet and place it on the plate": {
+          "episodes": 50,
+          "successes": 35,
+          "success_rate": 0.7
+        }
+      }
+    },
+    "libero_10": {
+      "log": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/results/libero_10/steps_55000_pytorch_model.pt/eval.log",
+      "success_rate": 0.676,
+      "episodes": 500,
+      "per_task": {
+        "put both the alphabet soup and the tomato sauce in the basket": {
+          "episodes": 50,
+          "successes": 34,
+          "success_rate": 0.68
+        },
+        "put both the cream cheese box and the butter in the basket": {
+          "episodes": 50,
+          "successes": 38,
+          "success_rate": 0.76
+        },
+        "turn on the stove and put the moka pot on it": {
+          "episodes": 50,
+          "successes": 35,
+          "success_rate": 0.7
+        },
+        "put the black bowl in the bottom drawer of the cabinet and close it": {
+          "episodes": 50,
+          "successes": 43,
+          "success_rate": 0.86
+        },
+        "put the white mug on the left plate and put the yellow and white mug on the right plate": {
+          "episodes": 50,
+          "successes": 19,
+          "success_rate": 0.38
+        },
+        "pick up the book and place it in the back compartment of the caddy": {
+          "episodes": 50,
+          "successes": 45,
+          "success_rate": 0.9
+        },
+        "put the white mug on the plate and put the chocolate pudding to the right of the plate": {
+          "episodes": 50,
+          "successes": 31,
+          "success_rate": 0.62
+        },
+        "put both the alphabet soup and the cream cheese box in the basket": {
+          "episodes": 50,
+          "successes": 27,
+          "success_rate": 0.54
+        },
+        "put both moka pots on the stove": {
+          "episodes": 50,
+          "successes": 28,
+          "success_rate": 0.56
+        },
+        "put the yellow and white mug in the microwave and close it": {
+          "episodes": 50,
+          "successes": 38,
+          "success_rate": 0.76
+        }
+      }
+    }
+  }
+}

@@ -47,6 +47,11 @@ class EmbodimentTag(Enum):
     The AgiBot G1 dual-arm robot with head, waist, and parallel grippers.
     """
 
+    AGIBOT_G2 = "agibot_g2"
+    """
+    The AgiBot G2 dual-arm robot with head, waist, and parallel grippers.
+    """
+
     NEW_EMBODIMENT = "new_embodiment"
     """
     Any new embodiment for finetuning.
@@ -86,6 +91,7 @@ EMBODIMENT_TAG_MAPPING = {
     EmbodimentTag.OXE_RT1.value: 19,
     EmbodimentTag.AGIBOT_GENIE1.value: 26,
     EmbodimentTag.AGIBOT_G1.value: 11,
+    EmbodimentTag.AGIBOT_G2.value: 12,
     EmbodimentTag.GR1.value: 24,
     EmbodimentTag.FRANKA.value: 25,
     EmbodimentTag.ALOHA.value: 7,

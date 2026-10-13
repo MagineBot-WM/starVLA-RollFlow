@@ -1,0 +1,32 @@
+{
+  "name": "agibot_g2_rollflow_h64_c16",
+  "protocol": "starvla_eva_contract_v1",
+  "robot": "agibot_g2",
+  "cameras": [
+    {"eva_key": "top_head", "training_key": "video.top_head"},
+    {"eva_key": "hand_left", "training_key": "video.hand_left"},
+    {"eva_key": "hand_right", "training_key": "video.hand_right"}
+  ],
+  "image": {"hw": [224, 224], "color": "rgb", "resize": "direct", "interpolation": "bicubic", "rotate_180": false},
+  "state": {
+    "include": true,
+    "raw_dim": 24,
+    "fields": [
+      {"training_key": "state.left_arm", "slice": [0, 7]},
+      {"training_key": "state.left_gripper", "slice": [7, 8]},
+      {"training_key": "state.right_arm", "slice": [8, 15]},
+      {"training_key": "state.right_gripper", "slice": [15, 16]},
+      {"training_key": "state.head", "slice": [16, 19]},
+      {"training_key": "state.waist", "slice": [19, 24]}
+    ]
+  },
+  "action": {
+    "mode": "joint",
+    "dim": 24,
+    "chunk_size": 16,
+    "unnorm_key": "agibot_g2",
+    "training_keys": ["action.left_arm", "action.left_gripper", "action.right_arm", "action.right_gripper", "action.head", "action.waist"]
+  },
+  "model": {"framework": "QwenGR00TRollingFlow", "horizon": 64, "inference_steps": 4},
+  "inference_kwargs": {}
+}

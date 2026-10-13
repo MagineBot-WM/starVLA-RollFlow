@@ -1,0 +1,44 @@
+episode=0 chunks=18 rmse=0.071835
+episode=13 chunks=22 rmse=0.048552
+episode=27 chunks=14 rmse=0.055323
+episode=40 chunks=19 rmse=0.032563
+episode=54 chunks=19 rmse=0.057544
+episode=67 chunks=13 rmse=0.045533
+episode=81 chunks=15 rmse=0.052991
+episode=94 chunks=15 rmse=0.044088
+episode=108 chunks=14 rmse=0.053168
+Saved EVA replay report: /data/tzq/tmp/agibot_g2_eva_pipeline_final_20261013.json
+{
+  "actions_scored": 2320,
+  "mse": 0.002755235931965567,
+  "mae": 0.014363792072752131,
+  "rmse": 0.05249034132071887,
+  "max_abs_error": 0.7850000262260437,
+  "mean_action_vector_cosine": 0.9981122654983837,
+  "per_dimension_rmse": [
+    1.3125394720912803e-09,
+    2.0954757928848267e-09,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.08337635495601806,
+    0.017480917947930236,
+    0.03954287134472122,
+    0.0785586275637625,
+    0.04241706461629637,
+    0.049696117509512,
+    0.10389267777695814,
+    0.18992299728695375,
+    0.00013968349587054226,
+    0.0,
+    4.7942086021207934e-05,
+    0.0,
+    3.4864061642351424e-09,
+    0.0,
+    0.0,
+    0.0
+  ]
+}

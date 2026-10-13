@@ -1,0 +1,18 @@
+{
+  "component": "EVA-CLIENT",
+  "upstream_url": "https://github.com/Noietch/EVA-CLIENT",
+  "source": "user-supplied EVA-CLIENT-main (2).zip",
+  "archive_sha256": "9d383de45678fc8df9546c4132da98dfba19292cd6d6a9d009f9eeadd9449b13",
+  "upstream_commit": null,
+  "license": "Apache-2.0; bundled third-party source retains its own notices",
+  "upstream_license_path": "EVA-CLIENT/LICENSE",
+  "project_metadata_version": "0.1.0",
+  "source_comparison": "1353 non-cache files match the supplied archive byte-for-byte",
+  "integration": "Plugins under examples/realRobots/EvaClient/eva_extension; no vendor source patches",
+  "excluded": [
+    "__pycache__ and runtime caches",
+    "Python environments and runtime outputs",
+    "examples/agilex_dataset recorded demo dataset"
+  ],
+  "hardware_sdk_note": "AgiBot GDK is installed separately. Nested .gitmodules are source records, not root Git submodule registrations."
+}

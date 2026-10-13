@@ -259,3 +259,29 @@ examples/realRobots/UnitreeG1_WholeBody/sdk_tools/Jinhui.sh
 examples/realRobots/UnitreeG1_WholeBody/step3_deployment/eval_files/local_self_test.py
 examples/realRobots/UnitreeG1_WholeBody/sdk_tools/SonicStar
 examples/realRobots/UnitreeG1_WholeBody/sdk_tools/sonicstar_wbc_deployment_reference
+
+# EVA deployment source, documentation and upstream SDK headers.
+!/EVA-CLIENT/**/*.md
+!/EVA-CLIENT/.python-version
+!/EVA-CLIENT/examples/hardware/arx_x5/.python-version
+!/EVA-CLIENT/**/*.jpg
+!/EVA-CLIENT/examples/hardware/arx_r5/SDK/ARX_R5_python/bimanual/lib/
+!/EVA-CLIENT/examples/hardware/arx_r5/SDK/ARX_R5_python/bimanual/lib/**
+/EVA-CLIENT/**/*.so
+# Recorded sample data is supplied separately from the deployment source.
+/EVA-CLIENT/examples/agilex_dataset/
+
+!docs/eva_deployment.md
+!docs/releases/eva-deploy-20261013.md
+!examples/realRobots/EvaClient/validation_report_20261013.md
+!examples/realRobots/EvaClient/validation/20261013/videos/*.mp4
+
+# Original input archives and superseded V3 patch installer stay local.
+/examples/realRobots/EVA-CLIENT-main (2).zip
+/examples/realRobots/eva_starvla_generic_patch_v3.zip
+/apply_patch.py
+/manifest.json
+/EVA-CLIENT/configs/01_deploy/agibot_g2/starvla_qpos.py
+/datasets/
+/checkpoints/
+/work_dirs/

@@ -1,0 +1,141 @@
+[project]
+name = "eva-client"
+version = "0.1.0"
+description = "Unified robot debugging client for VLA inference serving."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "addict>=2.4.0",
+    "av>=17.1.0",
+    "h5py==3.13.0",
+    "imageio==2.37.3",
+    "imageio-ffmpeg==0.6.0",
+    "jax==0.6.2",
+    "jaxlib==0.6.2",
+    "jaxls @ git+https://github.com/brentyi/jaxls.git@50a58be88c5ef74532f09e3f55268b4f02c490e3",
+    "msgpack==1.1.2",
+    "msgpack-numpy==0.4.8",
+    "mcap==1.4.0",
+    "numpy==1.26.4",
+    "opencv-python==4.10.0.84",
+    "openpi-client==0.1.2",
+    "pillow==12.2.0",
+    "psutil==7.1.0",
+    "pyarrow==23.0.0",
+    "pycollada==0.9.3",
+    "pydantic==2.11.7",
+    "pyroki @ git+https://github.com/chungmin99/pyroki.git@388e43e1fc0d0ee382968d3dd72970fd62a0450c",
+    "pyyaml==6.0.3",
+    "pyzmq>=25.0.0",
+    "rospkg==1.6.1",
+    "scipy==1.15.3",
+    "tqdm==4.67.3",
+    "trimesh==4.11.5",
+    "viser==1.0.26",
+    "websockets==13.1",
+    "yourdfpy==0.0.60",
+]
+
+[project.optional-dependencies]
+dev = [
+    "huggingface-hub>=1.20.1",
+    "pyright==1.1.408",
+    "pytest==8.3.5",
+    "pytest-cov==6.0.0",
+    "ruff==0.15.9",
+]
+viz = [
+    "fast-simplification==0.1.13",
+]
+
+[project.scripts]
+eva = "main:main"
+
+[tool.uv]
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+sources = ["src"]
+include = ["src", "tools"]
+
+[tool.ruff]
+line-length = 100
+# Vendored third-party SDKs ship their own style; never lint or format them.
+extend-exclude = ["examples/hardware/arx_r5/SDK", "examples/hardware/arx_x5/SDK"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# Keep the existing `class X(str, enum.Enum)` declarations for stable public enum behavior.
+ignore = ["UP042"]
+
+# These modules must run setup before importing project code: manual verify scripts
+# stub the `av` package and extend sys.path; test_solver gates imports behind
+# pytest.importorskip. E402 (import not at top) is unavoidable and intended here.
+[tool.ruff.lint.per-file-ignores]
+"tests/manual/*.py" = ["E402"]
+"tests/ik/test_solver.py" = ["E402"]
+# Asserts exact HTML/JS substrings from the console template; wrapping them would
+# break the literal match, so long lines are unavoidable here.
+"tests/integration/web/test_console_static.py" = ["E501"]
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+reportMissingImports = false
+extraPaths = [
+    "src",
+    "/opt/ros/noetic/lib/python3/dist-packages",
+    "/home/agilex/cobot_magic/Piper_ros_private-ros-noetic/devel/lib/python3/dist-packages",
+]
+
+# Tests use numpy-heavy fixtures and access private helpers by design. Silence the
+# strict-only diagnostics (basedpyright defaults) for tests/ without relaxing src/.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportAttributeAccessIssue = false
+reportArgumentType = false
+reportCallIssue = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownLambdaType = false
+reportMissingParameterType = false
+reportMissingTypeArgument = false
+reportOptionalMemberAccess = false
+reportPrivateUsage = false
+reportImplicitOverride = false
+reportUnusedCallResult = false
+reportUnusedFunction = false
+
+[tool.pytest.ini_options]
+addopts = [
+    "-p", "no:ament_lint",
+    "-p", "no:ament_xmllint",
+    "-p", "no:launch_testing",
+    "-p", "no:ament_pep257",
+    "-p", "no:ament_flake8",
+    "-p", "no:ament_copyright",
+    "-p", "no:launch_ros",
+]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+markers = [
+    "slow: requires heavy deps (pyroki/jax/URDF, HDF5)",
+]

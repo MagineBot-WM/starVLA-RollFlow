@@ -1,0 +1,129 @@
+{
+  "config": "/data/tzq/starVLA-RollFlow/examples/realRobots/EvaClient/configs/libero_sim.py",
+  "server": {
+    "env": "starvla_eva_contract_server",
+    "ckpt_path": "/data/tzq/starVLA_checkpoints/libero_rollflow_h64_c8_mf_from0_fm20k_vlm_unfrozen/final_model/pytorch_model.pt",
+    "action_chunk_size": 8,
+    "available_unnorm_keys": [
+      "franka"
+    ],
+    "default_unnorm_key": "franka",
+    "training_data_mix": "libero_all_rollflow_h64",
+    "training_obs_image_size": [
+      224,
+      224
+    ],
+    "eval_image_contract": "Eval clients must explicitly choose image count and order. The server does not infer or reorder camera views from training config.",
+    "action_keys": [
+      "action.x",
+      "action.y",
+      "action.z",
+      "action.roll",
+      "action.pitch",
+      "action.yaw",
+      "action.gripper"
+    ],
+    "state_keys": [
+      "state.x",
+      "state.y",
+      "state.z",
+      "state.roll",
+      "state.pitch",
+      "state.yaw",
+      "state.pad",
+      "state.gripper"
+    ],
+    "contract_name": "libero_rollflow_h64_c8",
+    "contract": {
+      "name": "libero_rollflow_h64_c8",
+      "protocol": "starvla_eva_contract_v1",
+      "robot": "libero_franka",
+      "cameras": [
+        {
+          "eva_key": "agentview",
+          "training_key": "video.primary_image"
+        },
+        {
+          "eva_key": "wrist",
+          "training_key": "video.wrist_image"
+        }
+      ],
+      "image": {
+        "hw": [
+          224,
+          224
+        ],
+        "color": "rgb",
+        "resize": "direct",
+        "rotate_180": true
+      },
+      "state": {
+        "include": false,
+        "raw_dim": 0,
+        "fields": []
+      },
+      "action": {
+        "mode": "joint",
+        "semantics": "libero_cartesian_delta",
+        "dim": 7,
+        "chunk_size": 8,
+        "unnorm_key": "franka",
+        "training_keys": [
+          "action.x",
+          "action.y",
+          "action.z",
+          "action.roll",
+          "action.pitch",
+          "action.yaw",
+          "action.gripper"
+        ]
+      },
+      "model": {
+        "framework": "QwenGR00TRollFlow",
+        "horizon": 64,
+        "inference_steps": 8
+      },
+      "inference_kwargs": {}
+    },
+    "contract_sha256": "192a9206cbb234107d9e7cdcbc39e87aa297d10f769932b08166105fa87c32bc",
+    "stream_policy": "single_connection_with_reset_on_connect_and_disconnect",
+    "server_name": "starvla-eva-contract",
+    "action_mode": "joint",
+    "action_dim": 7
+  },
+  "suite": "libero_goal",
+  "task_ids": [
+    0,
+    1
+  ],
+  "episodes": [
+    {
+      "task_id": 0,
+      "episode_index": 0,
+      "task": "open the middle drawer of the cabinet",
+      "success": false,
+      "steps": 300,
+      "chunks": 38,
+      "mean_inference_ms": 308.6933992607029,
+      "elapsed_seconds": 105.05458386335522,
+      "complete": true,
+      "video": "/data/tzq/tmp/libero_eva_pipeline_final_videos_20261013/task_0_episode_0.mp4"
+    },
+    {
+      "task_id": 1,
+      "episode_index": 0,
+      "task": "put the bowl on the stove",
+      "success": false,
+      "steps": 300,
+      "chunks": 38,
+      "mean_inference_ms": 312.1866318152139,
+      "elapsed_seconds": 104.94421219266951,
+      "complete": true,
+      "video": "/data/tzq/tmp/libero_eva_pipeline_final_videos_20261013/task_1_episode_0.mp4"
+    }
+  ],
+  "success_rate": 0.0,
+  "mean_inference_ms": 310.4400155379584,
+  "rollout_path": "EVA StarVlaRollingStrategy -> fetch_action_chunk -> gripper/action normalization -> LiberoSimTransport.publish_action -> closed-loop next observation",
+  "trajectory_artifact": "/data/tzq/tmp/libero_eva_pipeline_final_20261013.npz"
+}

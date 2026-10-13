@@ -1,0 +1,113 @@
+{
+  "date": "2026-10-13",
+  "kind": "existing_workspace_validation_artifacts",
+  "notes": [
+    "Files are copied byte-for-byte; absolute paths in original JSON describe the validation machine.",
+    "Local MeanFlow diagnosis modifications were present during validation and remain outside this deployment commit.",
+    "G2 pure rolling-flow is independent of the MeanFlow implementation. Packaging did not rerun inference."
+  ],
+  "artifacts": [
+    {
+      "path": "agibot_g2_eva_pipeline_final_20261013.json",
+      "original_path": "/data/tzq/tmp/agibot_g2_eva_pipeline_final_20261013.json",
+      "size_bytes": 40515,
+      "sha256": "bc9b6068188cffb8bb16e2dc7ea41522afc7d4ec21c2616080f9479388d0903d"
+    },
+    {
+      "path": "agibot_g2_eva_pipeline_final_20261013.npz",
+      "original_path": "/data/tzq/tmp/agibot_g2_eva_pipeline_final_20261013.npz",
+      "size_bytes": 120209,
+      "sha256": "c0fd5cab6545ca2778de319a6eabf74da6b437d6ca533ded9bc34f638b1c62a7"
+    },
+    {
+      "path": "eva_g2_final_summary_20261013.json",
+      "original_path": "/data/tzq/tmp/eva_g2_final_summary_20261013.json",
+      "size_bytes": 3181,
+      "sha256": "fe48e07b097845d853308dd69fb7d9c46747a8d03cc854f33092479acdc878d5"
+    },
+    {
+      "path": "libero_eva_verified_55k_20261013.json",
+      "original_path": "/data/tzq/tmp/libero_eva_verified_55k_20261013.json",
+      "size_bytes": 4490,
+      "sha256": "25f7df5c0cb36a9b1d378e487df796b80970893073d54f744282f4a846df2d94"
+    },
+    {
+      "path": "libero_eva_verified_55k_20261013.npz",
+      "original_path": "/data/tzq/tmp/libero_eva_verified_55k_20261013.npz",
+      "size_bytes": 11725,
+      "sha256": "ecf69f01e5af92da678a2c226095b28c4b499dfb6bda7a40bc833530a13eebb5"
+    },
+    {
+      "path": "eva_libero_checkpoint_selection_20261013.json",
+      "original_path": "/data/tzq/tmp/eva_libero_checkpoint_selection_20261013.json",
+      "size_bytes": 7937,
+      "sha256": "245d69dc6e5b7f2af7b2075d05d6d6b42a8b65f886c03d4d6b94635025c4315b"
+    },
+    {
+      "path": "eva_libero_verified_55k_bowl_rollout_parity_20261013.json",
+      "original_path": "/data/tzq/tmp/eva_libero_verified_55k_bowl_rollout_parity_20261013.json",
+      "size_bytes": 803,
+      "sha256": "1ca9f7f3d84910cec08fe7a1400216629cbd153d5327b5cdd2da0689dfb6fd98"
+    },
+    {
+      "path": "eva_libero_verified_55k_bowl_rollout_parity_20261013.input.npz",
+      "original_path": "/data/tzq/tmp/eva_libero_verified_55k_bowl_rollout_parity_20261013.input.npz",
+      "size_bytes": 5897537,
+      "sha256": "7dd69100bb7af058fa9724cd5894e16ccf4208e5c5b49b78364ad21ab027467a"
+    },
+    {
+      "path": "eva_libero_verified_55k_bowl_rollout_parity_20261013.input.reference.npz",
+      "original_path": "/data/tzq/tmp/eva_libero_verified_55k_bowl_rollout_parity_20261013.input.reference.npz",
+      "size_bytes": 17558,
+      "sha256": "516df7149e512109eeb172671225e40b2653c99694591770c019c107912eff30"
+    },
+    {
+      "path": "libero_eva_pipeline_final_20261013.json",
+      "original_path": "/data/tzq/tmp/libero_eva_pipeline_final_20261013.json",
+      "size_bytes": 3646,
+      "sha256": "f2707a3ec60b8c6ccfc2680b4571862fc3e1d6e34a23794f8287013a5ba90872"
+    },
+    {
+      "path": "agibot_g2_eva_pipeline_final_20261013.log.txt",
+      "original_path": "/data/tzq/tmp/agibot_g2_eva_pipeline_final_20261013.log",
+      "size_bytes": 1076,
+      "sha256": "6e69f2b00ad666e8d5bc5324a287e47d20419aeb31fb66fea1724db6b20dedc9"
+    },
+    {
+      "path": "libero_eva_verified_55k_20261013.log.txt",
+      "original_path": "/data/tzq/tmp/libero_eva_verified_55k_20261013.log",
+      "size_bytes": 2463,
+      "sha256": "b4d5b1a3f9bbdef8a06ba3fc8dae7a8b839d21394c2c41f0eea862e0b561a325"
+    },
+    {
+      "path": "eva_libero_verified_55k_bowl_rollout_parity_20261013.log.txt",
+      "original_path": "/data/tzq/tmp/eva_libero_verified_55k_bowl_rollout_parity_20261013.log",
+      "size_bytes": 6407,
+      "sha256": "4a7a36eb7c885ec84464c6d364acbeaaabb95c6cb601929f23ee466d705e9dca"
+    },
+    {
+      "path": "videos/task_0_episode_0.mp4",
+      "original_path": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_0_episode_0.mp4",
+      "size_bytes": 242586,
+      "sha256": "52d0af92951e8ae7d05c71698bb5b259b8410fefc8c44d50678c67afde517107"
+    },
+    {
+      "path": "videos/task_0_episode_1.mp4",
+      "original_path": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_0_episode_1.mp4",
+      "size_bytes": 230644,
+      "sha256": "bc88944bd2899c6062c26bd85d6378ad5eabc3d9f0320d8e8a8304c2c26a7742"
+    },
+    {
+      "path": "videos/task_1_episode_0.mp4",
+      "original_path": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_1_episode_0.mp4",
+      "size_bytes": 228915,
+      "sha256": "98c7ffd278f641f79bc7fb20070c8bf47419287a388d621b7d8000962a4f92e1"
+    },
+    {
+      "path": "videos/task_1_episode_1.mp4",
+      "original_path": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_1_episode_1.mp4",
+      "size_bytes": 712426,
+      "sha256": "0de8cc546b786e426b30cbd97023a25914a58de8c1b27509cdbc6bcccae4625b"
+    }
+  ]
+}

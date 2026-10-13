@@ -1,0 +1,155 @@
+{
+  "config": "/data/tzq/starVLA-RollFlow/examples/realRobots/EvaClient/configs/libero_sim_verified.py",
+  "server": {
+    "env": "starvla_eva_contract_server",
+    "ckpt_path": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt",
+    "action_chunk_size": 8,
+    "available_unnorm_keys": [
+      "franka"
+    ],
+    "default_unnorm_key": "franka",
+    "training_data_mix": "libero_all_rollflow",
+    "training_obs_image_size": [
+      224,
+      224
+    ],
+    "eval_image_contract": "Eval clients must explicitly choose image count and order. The server does not infer or reorder camera views from training config.",
+    "action_keys": [
+      "action.x",
+      "action.y",
+      "action.z",
+      "action.roll",
+      "action.pitch",
+      "action.yaw",
+      "action.gripper"
+    ],
+    "state_keys": [
+      "state.x",
+      "state.y",
+      "state.z",
+      "state.roll",
+      "state.pitch",
+      "state.yaw",
+      "state.pad",
+      "state.gripper"
+    ],
+    "contract_name": "libero_rollflow_h32_c8_k4",
+    "contract": {
+      "name": "libero_rollflow_h32_c8_k4",
+      "protocol": "starvla_eva_contract_v1",
+      "robot": "libero_franka",
+      "cameras": [
+        {
+          "eva_key": "agentview",
+          "training_key": "video.primary_image"
+        },
+        {
+          "eva_key": "wrist",
+          "training_key": "video.wrist_image"
+        }
+      ],
+      "image": {
+        "hw": [
+          224,
+          224
+        ],
+        "color": "rgb",
+        "resize": "direct",
+        "interpolation": "bilinear",
+        "rotate_180": true
+      },
+      "state": {
+        "include": false,
+        "raw_dim": 0,
+        "fields": []
+      },
+      "action": {
+        "mode": "joint",
+        "semantics": "libero_cartesian_delta",
+        "dim": 7,
+        "chunk_size": 8,
+        "unnorm_key": "franka",
+        "training_keys": [
+          "action.x",
+          "action.y",
+          "action.z",
+          "action.roll",
+          "action.pitch",
+          "action.yaw",
+          "action.gripper"
+        ]
+      },
+      "model": {
+        "framework": "QwenGR00TRollFlow",
+        "horizon": 32,
+        "inference_steps": 4
+      },
+      "inference_kwargs": {}
+    },
+    "contract_sha256": "8af98708a91cdf039f79be4bbe85e7623d13256451e86455551a21f820fc418d",
+    "stream_policy": "single_connection_with_reset_on_connect_and_disconnect",
+    "server_name": "starvla-eva-contract",
+    "action_mode": "joint",
+    "action_dim": 7
+  },
+  "suite": "libero_goal",
+  "task_ids": [
+    0,
+    1
+  ],
+  "policy_seed_per_episode": 7,
+  "episodes": [
+    {
+      "task_id": 0,
+      "episode_index": 0,
+      "task": "open the middle drawer of the cabinet",
+      "success": true,
+      "steps": 121,
+      "chunks": 16,
+      "mean_inference_ms": 376.67982652783394,
+      "elapsed_seconds": 48.32083556521684,
+      "complete": true,
+      "video": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_0_episode_0.mp4"
+    },
+    {
+      "task_id": 0,
+      "episode_index": 1,
+      "task": "open the middle drawer of the cabinet",
+      "success": true,
+      "steps": 115,
+      "chunks": 15,
+      "mean_inference_ms": 308.0018353338043,
+      "elapsed_seconds": 44.88238027691841,
+      "complete": true,
+      "video": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_0_episode_1.mp4"
+    },
+    {
+      "task_id": 1,
+      "episode_index": 0,
+      "task": "put the bowl on the stove",
+      "success": true,
+      "steps": 89,
+      "chunks": 12,
+      "mean_inference_ms": 318.26163510171074,
+      "elapsed_seconds": 38.140635502524674,
+      "complete": true,
+      "video": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_1_episode_0.mp4"
+    },
+    {
+      "task_id": 1,
+      "episode_index": 1,
+      "task": "put the bowl on the stove",
+      "success": false,
+      "steps": 300,
+      "chunks": 38,
+      "mean_inference_ms": 303.3865704201162,
+      "elapsed_seconds": 129.6846132716164,
+      "complete": true,
+      "video": "/data/tzq/tmp/libero_eva_verified_55k_videos_20261013/task_1_episode_1.mp4"
+    }
+  ],
+  "success_rate": 0.75,
+  "mean_inference_ms": 320.9226426128068,
+  "rollout_path": "EVA StarVlaRollingStrategy -> fetch_action_chunk -> gripper/action normalization -> LiberoSimTransport.publish_action -> closed-loop next observation",
+  "trajectory_artifact": "/data/tzq/tmp/libero_eva_verified_55k_20261013.npz"
+}

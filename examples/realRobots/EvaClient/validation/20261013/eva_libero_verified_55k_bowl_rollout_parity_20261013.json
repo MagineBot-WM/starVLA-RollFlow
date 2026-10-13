@@ -1,0 +1,22 @@
+{
+  "pixel_max_abs_error": 0,
+  "raw_chunk_max_abs_error": 0.0,
+  "processed_chunk_max_abs_error": 0.0,
+  "shape": [
+    38,
+    8,
+    7
+  ],
+  "chunks": 38,
+  "executed_steps": 300,
+  "eva_rollout_success": false,
+  "prompt": "put the bowl on the stove",
+  "task_id": 1,
+  "init_state_id": 1,
+  "checkpoint": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt",
+  "passed": true,
+  "reference": "Unmodified LIBERO ModelClient.step, same observation sequence/server/checkpoint, reset seed=7",
+  "scope": "EVA adapter and cache/chunk/gripper handling; shares the StarVLA server implementation",
+  "original_rollout_actions_max_abs_error": 0.0,
+  "original_rollout_trace": "/data/tzq/tmp/libero_eva_verified_55k_20261013.npz"
+}

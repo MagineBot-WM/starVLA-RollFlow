@@ -1,0 +1,29 @@
+[robosuite WARNING] No private macro file found! (macros.py:53)
+[robosuite WARNING] It is recommended to use a private macro file (macros.py:54)
+[robosuite WARNING] To setup, run: python /data/tzq/tmp/eva-starvla-py311/lib/python3.11/site-packages/robosuite/scripts/setup_macros.py (macros.py:55)
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+/home/taizun/tzq/LIBERO/libero/libero/benchmark/__init__.py:173: UserWarning: Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, since the`weights_only` argument was not explicitly passed to `torch.load`, forcing weights_only=False.
+  init_states = torch.load(init_states_path)
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+task=0 episode=0 success=True steps=121 chunks=16
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+task=0 episode=1 success=True steps=115 chunks=15
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+task=1 episode=0 success=True steps=89 chunks=12
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+[Warning]: datasets path /home/taizun/tzq/LIBERO/libero/datasets does not exist!
+task=1 episode=1 success=False steps=300 chunks=38
+Saved LIBERO EVA rollout report: /data/tzq/tmp/libero_eva_verified_55k_20261013.json

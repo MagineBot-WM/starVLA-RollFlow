@@ -20,6 +20,15 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 ## News
 
+### EVA deployment version · 2026-10-13
+
+This fork includes the supplied EVA client in [EVA-CLIENT](EVA-CLIENT/) and
+an additive StarVLA bridge in [examples/realRobots/EvaClient](examples/realRobots/EvaClient/).
+Start with the [deployment and migration guide](docs/eva_deployment.md).
+The [release notes](docs/releases/eva-deploy-20261013.md) list the included components;
+the [validation report](examples/realRobots/EvaClient/validation_report_20261013.md)
+contains G2 held-out replay metrics, LIBERO closed-loop results and videos.
+
 > **⚠️ Branch notice:** The `starVLA_dev` branch is where we actively merge new features and may be temporarily unstable. For verified results, use the stable `starVLA` branch. Thanks to StarVLA's low-coupling design, switching between branches is painless. We encourage trying `starVLA_dev` and welcome PRs if you spot any issues!
 
 > **💡 Tip:** Files under any `**/bar/` directory are git-ignored, so you can place your custom scripts there (e.g., `examples/simBenchmarks/LIBERO/train_files/bar/my_train.sh`) without polluting the repo.

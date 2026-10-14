@@ -275,6 +275,10 @@ examples/realRobots/UnitreeG1_WholeBody/sdk_tools/sonicstar_wbc_deployment_refer
 !docs/releases/eva-deploy-20261013.md
 !examples/realRobots/EvaClient/validation_report_20261013.md
 !examples/realRobots/EvaClient/validation/20261013/videos/*.mp4
+!examples/deployment/eva/validation_report_20261013.md
+!examples/deployment/eva/validation_report_20261014.md
+!examples/deployment/eva/G2_ASYNC_DEPLOYMENT.md
+!examples/deployment/eva/validation/20261014/videos_async/*.mp4
 
 # Original input archives and superseded V3 patch installer stay local.
 /examples/realRobots/EVA-CLIENT-main (2).zip

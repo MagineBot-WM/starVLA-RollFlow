@@ -1,0 +1,446 @@
+{
+  "date": "2026-10-14",
+  "baseline_commit": "b44e91844f53997833df95f2d97bd6d361109dc5",
+  "tested_from": "working tree; CPU final snapshot, model regressions collected during deployment implementation",
+  "physical_robot_actions": false,
+  "gpu": 3,
+  "model_allocator_limit_gib": 6,
+  "protected_training_pids": [
+    3219400,
+    3219401,
+    3219402,
+    3219403
+  ],
+  "model_worktree_diff_sha256": "9bad1a5020316e9cb3b04ca600cc08a216f323db358cc842509f7c41a19fb4aa",
+  "model_worktree_diff_matches_20261013": true,
+  "model_note": "Pre-existing MeanFlow diagnostics; deployment work did not edit model source",
+  "artifacts": [
+    {
+      "path": "cpu.log.txt",
+      "size_bytes": 99,
+      "sha256": "d7b9488812bdc0cb7cd5ed249d100385337be63b0b00246137ddab99749c8a7e"
+    },
+    {
+      "path": "cpu.xml",
+      "size_bytes": 10357,
+      "sha256": "f6eb0f6300a7349fba6863dc1e99cd310a642af18f2dcb0972bc4e355e51f7b3"
+    },
+    {
+      "path": "eva_source_audit.json",
+      "size_bytes": 151,
+      "sha256": "c4039a7f4d38a7a003d7a3a51e8b3f515c38623f5d403a873a8d16753b1f30f0"
+    },
+    {
+      "path": "g2_async4.json",
+      "size_bytes": 281361,
+      "sha256": "a111ecc55a1afb2240d7b80c6236cfb3d5a9abec91917c71354d6f9cd4c3b6ff"
+    },
+    {
+      "path": "g2_async4.npz",
+      "size_bytes": 119931,
+      "sha256": "433fc68583449e7e860496e366cdf75cc4ae2a4ffb6cb6a781c15b4e47284953"
+    },
+    {
+      "path": "g2_async4_doctor.json",
+      "size_bytes": 21189,
+      "sha256": "461f088d7e497ffc1b3ac61e59945134cb9b44d76da96018a51058741cf6d37e"
+    },
+    {
+      "path": "g2_async8.json",
+      "size_bytes": 281087,
+      "sha256": "ec3f507ab92a1c162442d5c22988ccbae044e99a33b23a572e7b03ba675001ff"
+    },
+    {
+      "path": "g2_async8.npz",
+      "size_bytes": 119997,
+      "sha256": "bb4b2e9cbbb1297e46fb24e5ef54dddae0ec72f9c22ab9ba0d8da5886eedbae7"
+    },
+    {
+      "path": "g2_async8_doctor.json",
+      "size_bytes": 21186,
+      "sha256": "4563b280a434b323fc580a7e2cb8483f4ae65c44a83d132ecc25afd87aad533d"
+    },
+    {
+      "path": "g2_comparison.json",
+      "size_bytes": 1985,
+      "sha256": "daf1ac8fcaf18e4d4c0289ba1504bab019ab3f4507be4d1c95c734be642ae5b0"
+    },
+    {
+      "path": "g2_direct.json",
+      "size_bytes": 46135,
+      "sha256": "3922e8b4a188e47c5bc99791a487766d34e7be06d06d154d8611f29448806aa7"
+    },
+    {
+      "path": "g2_direct.npz",
+      "size_bytes": 120209,
+      "sha256": "c0fd5cab6545ca2778de319a6eabf74da6b437d6ca533ded9bc34f638b1c62a7"
+    },
+    {
+      "path": "g2_episode0_active_joints.pdf",
+      "size_bytes": 74461,
+      "sha256": "3c0c5a76694349b040a66c73278aa56be867c4dd6f67adc1706bae2f25f31185"
+    },
+    {
+      "path": "g2_episode0_active_joints.png",
+      "size_bytes": 682942,
+      "sha256": "93acec0f3882ef46233a1c5756ab63b8ebadbc526d56f790881e0f007d59e659"
+    },
+    {
+      "path": "g2_episode0_all_joints.pdf",
+      "size_bytes": 81888,
+      "sha256": "cb8997d7526def0ab4f8413bc25d1cd3e2fd05a341161dddb813dd85d43c1058"
+    },
+    {
+      "path": "g2_episode0_all_joints.png",
+      "size_bytes": 737376,
+      "sha256": "bb6bfaf82bde9d9843d8633c00cf59193f16b572ca3b8111f91ad922b59df27c"
+    },
+    {
+      "path": "g2_initial_pose.json",
+      "size_bytes": 2833,
+      "sha256": "b4fcf7573284a895ad459d69251ce168f02ab180505951d414e33956b68be374"
+    },
+    {
+      "path": "g2_modes_summary.json",
+      "size_bytes": 3719,
+      "sha256": "ebd0aa7517da3b78f5d64f72bbf1093e937cb5c39bfccf30c93562ffa48634b4"
+    },
+    {
+      "path": "g2_normalization.json",
+      "size_bytes": 3079,
+      "sha256": "53cf57d9b705a2a20b96e024d72651ba718ec29c2a314dedfbc60fea9bdf6019"
+    },
+    {
+      "path": "g2_reconnect.json",
+      "size_bytes": 138,
+      "sha256": "ea10d5642a36fea1f29c90105ff5254a490fc25f40fc2906c2422ffc28877ca6"
+    },
+    {
+      "path": "g2_rmse_modes.pdf",
+      "size_bytes": 17113,
+      "sha256": "d9d0bca1da13f308ccb2c02b4a68e3f83d4de2a52642db37559c85aca0900667"
+    },
+    {
+      "path": "g2_rmse_modes.png",
+      "size_bytes": 55555,
+      "sha256": "f119af6a4430d7f055bc4e5655032b9e9ae329d10614266c1251be9f3c348b30"
+    },
+    {
+      "path": "g2_timing4.json",
+      "size_bytes": 13487,
+      "sha256": "8bd989473f27cce5930f760cf49f66f29a49ef44ae14d7ac5e11abf4f132e44b"
+    },
+    {
+      "path": "g2_timing8.json",
+      "size_bytes": 13860,
+      "sha256": "802184ad3f20063d5185dde51640d4e5377b7fa0fd693f4726cd2aae169e840b"
+    },
+    {
+      "path": "g2_wire_servo100.json",
+      "size_bytes": 209073,
+      "sha256": "ae33d8b760828a8a76328fa8836c576f1079fb7a74f076f7e107bab97c7f2709"
+    },
+    {
+      "path": "g2_wire_servo100.npz",
+      "size_bytes": 120209,
+      "sha256": "c0fd5cab6545ca2778de319a6eabf74da6b437d6ca533ded9bc34f638b1c62a7"
+    },
+    {
+      "path": "libero.json",
+      "size_bytes": 7830,
+      "sha256": "37e48d3056654195b8283e839d1e9039785e4b7b1500f2b904c4a6ce4b74ca9b"
+    },
+    {
+      "path": "libero.npz",
+      "size_bytes": 11725,
+      "sha256": "ecf69f01e5af92da678a2c226095b28c4b499dfb6bda7a40bc833530a13eebb5"
+    },
+    {
+      "path": "libero_async.json",
+      "size_bytes": 36767,
+      "sha256": "ca0f7cbaf9712dd1c2e5c1159392905dd402a79e305784eb856c2ed0ed03c0cc"
+    },
+    {
+      "path": "libero_async.npz",
+      "size_bytes": 13387,
+      "sha256": "08431b421b6e49da346663f9249a68c1af12d6c530d2acb3e20e8d2267f32af4"
+    },
+    {
+      "path": "libero_comparison.json",
+      "size_bytes": 64,
+      "sha256": "9ac9cff7089fdedb48d40e96806fc6034db990d9d0a55cf9512b9fde5ce24abb"
+    },
+    {
+      "path": "libero_reference.json",
+      "size_bytes": 704,
+      "sha256": "29090ad49734954b066705ffbead927228610da6e95493f8748445f1a71f1cd6"
+    },
+    {
+      "path": "videos_async/task_0_episode_0.mp4",
+      "size_bytes": 264347,
+      "sha256": "738bf298e934c7670c56e47167e1e5cf8dc16485cf30cbe6e38d0dd4a85902de"
+    },
+    {
+      "path": "videos_async/task_0_episode_1.mp4",
+      "size_bytes": 244219,
+      "sha256": "a1cd1b9de502fd769d4abad3976d07c73553358fe30094cf83044b5dffe8cd20"
+    },
+    {
+      "path": "videos_async/task_1_episode_0.mp4",
+      "size_bytes": 318964,
+      "sha256": "0e7747d42d034b3709c19dd2c1553df698df5541ecf07bc88f39eb304abc7a45"
+    },
+    {
+      "path": "videos_async/task_1_episode_1.mp4",
+      "size_bytes": 414998,
+      "sha256": "b25e5784725976a5599d086609131a0bd50e5eb5ba9006b7de2e445e585a3478"
+    },
+    {
+      "path": "wire_role_matrix.json",
+      "size_bytes": 1298,
+      "sha256": "7cc6f9a1744cc0063bbe0242b3d3203e64af002d5fbb4116ae40c0912039d0ab"
+    }
+  ],
+  "deployment_sources": [
+    {
+      "path": "examples/deployment/eva/G2_ASYNC_DEPLOYMENT.md",
+      "sha256": "63ce1ed92733ef88e8760bdfede466c2b936e0b655d8a4a9371f8f6fc604ed53"
+    },
+    {
+      "path": "examples/deployment/eva/README.md",
+      "sha256": "678b90344b12cd01710b8448f09e6a1a55f89618f6400977f6ed70ee6a24f8b4"
+    },
+    {
+      "path": "examples/deployment/eva/__init__.py",
+      "sha256": "c4d4b1dd01f453e0710aa625697b002c2f86fb3331d3ef3a3c6a7239594478eb"
+    },
+    {
+      "path": "examples/deployment/eva/__main__.py",
+      "sha256": "b5d9c68ddb3900d563cabc00e323196e78188dcef68b4081d7f4ca226d6c3950"
+    },
+    {
+      "path": "examples/deployment/eva/adapters/__init__.py",
+      "sha256": "a7f00cd3c3ceb83333da3ff05671a91af49a00cf160d9f6f55a4ff015eef9b4a"
+    },
+    {
+      "path": "examples/deployment/eva/adapters/eva.py",
+      "sha256": "00dc9ce2d53e7d29275d548fbf2d46bfa5b3280660e328d2a65667c1806c2c5a"
+    },
+    {
+      "path": "examples/deployment/eva/adapters/hardware.py",
+      "sha256": "1333c91a3d12d2559fe193861a4df82fe6121d48e1eeae219774822b3457613b"
+    },
+    {
+      "path": "examples/deployment/eva/adapters/reference.py",
+      "sha256": "ad0bd45997848d8034b47c55407ca2e0532eb31139432e12e81d552a988640a9"
+    },
+    {
+      "path": "examples/deployment/eva/adapters/starvla.py",
+      "sha256": "2b916f5acb3cf5eb86501c0d8e98d56abf3d217291d36c705eee22444b6ac910"
+    },
+    {
+      "path": "examples/deployment/eva/bridge_contract.py",
+      "sha256": "a898ba270373b3e90b8b1bf79f3edb53513bc8dffb9b1206db707f948b532acc"
+    },
+    {
+      "path": "examples/deployment/eva/capture_observation.py",
+      "sha256": "f0b6f32ef04868b0519c659dc672c10f037b3c880ca3d150a2e563dc0bdf2b4a"
+    },
+    {
+      "path": "examples/deployment/eva/configs/agibot_g2_live.py",
+      "sha256": "4b9eb532efb8d9dfd1f74dcc6e1002c50a6300a4f6f16a713719b9b9eeb98694"
+    },
+    {
+      "path": "examples/deployment/eva/configs/agibot_g2_live_async4.py",
+      "sha256": "f0989b8616a058e751fd04e3defdfbeb64163da1296f869433338d2bd7048454"
+    },
+    {
+      "path": "examples/deployment/eva/configs/agibot_g2_live_sync.py",
+      "sha256": "b988b9f9399d3012b94b684f9fef8ca4538d93654e9d1e0590073f02f8e22410"
+    },
+    {
+      "path": "examples/deployment/eva/configs/g2_replay.py",
+      "sha256": "7b39aae5bff539d91c02f895d018e4f5f8ae97d0909507babb7a9f114bc9f579"
+    },
+    {
+      "path": "examples/deployment/eva/configs/libero_sim.py",
+      "sha256": "0599cc243ddb284b0717b7ba6b1d0e135e9ea20950ba1f8f5e7490b190c3ff12"
+    },
+    {
+      "path": "examples/deployment/eva/configs/libero_sim_async.py",
+      "sha256": "44caa6e082169f60ecf40a60f77c34b856b1ae429429fc225cf461330ed59a32"
+    },
+    {
+      "path": "examples/deployment/eva/configs/libero_sim_verified.py",
+      "sha256": "e975c820f70ba3236359576c480cbfacc582d2822e6c496fd87d97daefb31be9"
+    },
+    {
+      "path": "examples/deployment/eva/contract_server.py",
+      "sha256": "d8a2774a558fae2c2e0c88cf2cb2cccc03a34937098ab0e00b2f336224958227"
+    },
+    {
+      "path": "examples/deployment/eva/contracts/agibot_g2_rollflow_h64_c16.json",
+      "sha256": "34f0d7edd1692381592c5d5600656963fffca181bdb50b583078880e147fcf5f"
+    },
+    {
+      "path": "examples/deployment/eva/contracts/agibot_g2_rollflow_h64_c16_async.json",
+      "sha256": "01da3919acd6542efab7c97968e844a54279159a76ccec4018e9b973edf3fd60"
+    },
+    {
+      "path": "examples/deployment/eva/contracts/agibot_g2_rollflow_h64_c16_async4.json",
+      "sha256": "f7758696ceeca946698de2871df3e09fc8f16168d718a7d34a4b5c0132624e9d"
+    },
+    {
+      "path": "examples/deployment/eva/contracts/libero_rollflow_h32_c8_k4.json",
+      "sha256": "24febd91226bc065dc6bfc3e1461e1e5a7d80a63d5939f8b16b01000c0295a86"
+    },
+    {
+      "path": "examples/deployment/eva/contracts/libero_rollflow_h32_c8_k4_async.json",
+      "sha256": "9d969f1e97fa1cc820123a6fec9b59f4ad34d67547512fc079d7524ef80cb6a9"
+    },
+    {
+      "path": "examples/deployment/eva/contracts/libero_rollflow_h64_c8.json",
+      "sha256": "ae27584537c8a2888531224f8346955800b3ba15a95defc9d25e86f71dff7515"
+    },
+    {
+      "path": "examples/deployment/eva/doctor.py",
+      "sha256": "08c5b17ea8ff8b53583260e53bf8070151c2bae62b64822b3963bc45773016b9"
+    },
+    {
+      "path": "examples/deployment/eva/eva_extension/__init__.py",
+      "sha256": "72f4cbeffafe9f3c84d5355564952701f2cdb424f377342b9f80cd697cbe1ff9"
+    },
+    {
+      "path": "examples/deployment/eva/eva_extension/async_rolling_strategy.py",
+      "sha256": "207fe69def993578439ef5be22ba3ea7183b413f219ffa89f3f95e3dcc740a8d"
+    },
+    {
+      "path": "examples/deployment/eva/eva_extension/image_transport.py",
+      "sha256": "833d1be155f27b0147d23907ff59ee81f85b51ec0984ef8b9a73f773eec05667"
+    },
+    {
+      "path": "examples/deployment/eva/eva_extension/libero_sim.py",
+      "sha256": "f909b031a69c88faa56084ec06f8999c295293ce70bf7e01908dc45a01fea869"
+    },
+    {
+      "path": "examples/deployment/eva/eva_extension/rolling_strategy.py",
+      "sha256": "fac573984770a37c88cb6686859a46fe30eaf58c9cb14fe1d960437fffb326cc"
+    },
+    {
+      "path": "examples/deployment/eva/eva_extension/starvla_policy.py",
+      "sha256": "bc29358ada75dd547f21f0523bface96793db33385d97ec3d8d9c74bff96d496"
+    },
+    {
+      "path": "examples/deployment/eva/evaluate_dataset_via_eva.py",
+      "sha256": "9951c688b27a2794bb92472f304180346cb76e3f4471a228c405cf28a2c38e2d"
+    },
+    {
+      "path": "examples/deployment/eva/evaluate_g2_async.py",
+      "sha256": "6676838b351c9645cf4577da66ec06d76b1b318f335f9aa8da01f6ae7112a53e"
+    },
+    {
+      "path": "examples/deployment/eva/evaluate_g2_wire.py",
+      "sha256": "810a82f58281ddabad0c41a28cc4f6e21bd6b9c4ac991f748be132e6208197b6"
+    },
+    {
+      "path": "examples/deployment/eva/evaluate_libero_via_eva.py",
+      "sha256": "ead41963182e5f12e34e96e26061c539e434096fa5775ff6ebabcb794b5fcf93"
+    },
+    {
+      "path": "examples/deployment/eva/evaluate_prefetch_timing.py",
+      "sha256": "42a916342c567aa68fd564c9c06b15d5d554d8759ec3d314cb2e0cc4ab9693c1"
+    },
+    {
+      "path": "examples/deployment/eva/execution_trace.py",
+      "sha256": "082f95348db9814dcb6ed5896d370effe3d56d1e02f186707396db02e48629dc"
+    },
+    {
+      "path": "examples/deployment/eva/g2_hardware.py",
+      "sha256": "cfef4fef8b8332451942ed279c4f6f2e477d197f302a0b31878b35a1f81c3ab0"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/__init__.py",
+      "sha256": "784b0a5cdc9c8de59c6a573cb9458efe4e671d0d0dd715482707e6b24b58add1"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/client.py",
+      "sha256": "e2d094ee02366066935fb5614f117085250feefd1631f4ddf84ac2e0b6572523"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/contract.py",
+      "sha256": "e9da8e5e9230ad7d48f7f15a34905f8f6efbf269221a2a9e6342315f2d4d2733"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/evaluate_replay.py",
+      "sha256": "6a5039eac5fc760b10a30f9669b90ad38253c6d7f424aa62faae53c8764739cf"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/observation.py",
+      "sha256": "76e4f26f2694a95cab3bbb8a6002504e3358d21a0421b41a6489edda873a1326"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/replay_transport.py",
+      "sha256": "3b71b3b2cf651263ccb480bcd5a8193dc8c6d7a0ab91c58e3021d7ea6780c56e"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/self_test.py",
+      "sha256": "43827950dc206c553e6aae871cd3d8b40fa83eed746fcd8c2f26c67acc74e072"
+    },
+    {
+      "path": "examples/deployment/eva/legacy/server.py",
+      "sha256": "d992333b8ab15dd8e93a63e6af584cad005cee15b565231d8348159eb0e85189"
+    },
+    {
+      "path": "examples/deployment/eva/msgpack_numpy.py",
+      "sha256": "c04568948fcee52b691e3be4b6cffb759f7e79ad67530fcd5d23095a0d13c057"
+    },
+    {
+      "path": "examples/deployment/eva/protocol.py",
+      "sha256": "4133eda11cb2fa7b03e0c7b0503a5f0701c898fad63830ce1b1c62a6e1372aca"
+    },
+    {
+      "path": "examples/deployment/eva/requirements-eval.txt",
+      "sha256": "ade0c5036d50ba203ed8f8654223bfc4a0d5a303d23f779b220eb42e5b8f83d2"
+    },
+    {
+      "path": "examples/deployment/eva/run_eva.py",
+      "sha256": "e1cc3c82a71c36cb726e24c09b6dd1d0f26055f119a633a888a453734baabc50"
+    },
+    {
+      "path": "examples/deployment/eva/runtime.py",
+      "sha256": "5185e7990b951f5532c2978b04fe18826082308d42f753dd5c9a4e4aaa7124a0"
+    },
+    {
+      "path": "examples/deployment/eva/self_test.py",
+      "sha256": "01726394dc3e53cf45a4e752ee085604139b063c19c496172f34eaa0c2ce1f1b"
+    },
+    {
+      "path": "examples/deployment/eva/setup_eval_environment.sh",
+      "sha256": "8efe3435be1f71a518c8d350225a58e8902a311585ea5d9effaa74c8bc938b7d"
+    },
+    {
+      "path": "examples/deployment/eva/simulation/__init__.py",
+      "sha256": "24399a6cf259c8782b9524521bc18ccc4aeb934c6ad129ad1aa77957c8b549c3"
+    },
+    {
+      "path": "examples/deployment/eva/simulation/g2_wire.py",
+      "sha256": "ca41b015c9e6e05de89365ea9f1ef59021708064f2c8fe6e5e7d6be12d38181d"
+    },
+    {
+      "path": "examples/deployment/eva/tests/test_deployment.py",
+      "sha256": "2217a2916190354a0f3b022391f5740cb00299521d3957bcda081ae9c4facc5c"
+    },
+    {
+      "path": "examples/deployment/eva/validation_report_20261013.md",
+      "sha256": "a73ed5d655605f263f51574ffe48b27ffd3e9bef221415e6425289f89e65bd32"
+    },
+    {
+      "path": "examples/deployment/eva/validation_report_20261014.md",
+      "sha256": "3a41eaab5bf4ec123c5ec035a250bbb1581ea0178bff528cd9fabeab50ff4a56"
+    },
+    {
+      "path": "examples/deployment/eva/verify_libero_reference.py",
+      "sha256": "cecfd7000fc819e5ac05cb5fbd15b4ac787ed36c6010668bb640529ed6255159"
+    }
+  ]
+}

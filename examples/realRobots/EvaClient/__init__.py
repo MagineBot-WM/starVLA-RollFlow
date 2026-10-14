@@ -1,1 +1,1 @@
-"""Additive EVA client/evaluation tools for StarVLA rolling-flow policies."""
+"""Compatibility entry points; use examples.deployment.eva for new deployments."""

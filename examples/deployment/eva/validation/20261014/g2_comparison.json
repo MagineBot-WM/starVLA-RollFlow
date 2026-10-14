@@ -1,0 +1,67 @@
+{
+  "all_arrays_identical_to_direct": true,
+  "all_arrays_identical_to_previous_report": true,
+  "array_max_abs_errors": {
+    "episode_0_prediction": 0.0,
+    "episode_0_target": 0.0,
+    "episode_13_prediction": 0.0,
+    "episode_13_target": 0.0,
+    "episode_27_prediction": 0.0,
+    "episode_27_target": 0.0,
+    "episode_40_prediction": 0.0,
+    "episode_40_target": 0.0,
+    "episode_54_prediction": 0.0,
+    "episode_54_target": 0.0,
+    "episode_67_prediction": 0.0,
+    "episode_67_target": 0.0,
+    "episode_81_prediction": 0.0,
+    "episode_81_target": 0.0,
+    "episode_94_prediction": 0.0,
+    "episode_94_target": 0.0,
+    "episode_108_prediction": 0.0,
+    "episode_108_target": 0.0
+  },
+  "previous_report_max_abs_errors": {
+    "episode_0_prediction": 0.0,
+    "episode_0_target": 0.0,
+    "episode_13_prediction": 0.0,
+    "episode_13_target": 0.0,
+    "episode_27_prediction": 0.0,
+    "episode_27_target": 0.0,
+    "episode_40_prediction": 0.0,
+    "episode_40_target": 0.0,
+    "episode_54_prediction": 0.0,
+    "episode_54_target": 0.0,
+    "episode_67_prediction": 0.0,
+    "episode_67_target": 0.0,
+    "episode_81_prediction": 0.0,
+    "episode_81_target": 0.0,
+    "episode_94_prediction": 0.0,
+    "episode_94_target": 0.0,
+    "episode_108_prediction": 0.0,
+    "episode_108_target": 0.0
+  },
+  "commands_received": 2320,
+  "servo_requests": 2320,
+  "chunks": 149,
+  "mse": 0.002755235931965567,
+  "rmse": 0.05249034132071887,
+  "inference_latency_ms_p50_p95_max": [
+    326.50572806596756,
+    397.03074749559164,
+    450.0261228531599
+  ],
+  "physical_robot_actions": false,
+  "servo_control_period_s": 0.01,
+  "within_chunk_interval_ms_p50_p95_max": [
+    59.752254746854305,
+    62.617586459964514,
+    80.66083025187254
+  ],
+  "chunk_boundary": [
+    741.650803014636,
+    955.6729017756877,
+    1020.3664219006896
+  ],
+  "interval_scope": "Synchronous recorded-data probe, includes decoder seek/PNG encode/mock tick overhead; not real-robot timing"
+}

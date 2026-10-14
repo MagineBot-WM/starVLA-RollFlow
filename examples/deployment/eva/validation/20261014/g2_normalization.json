@@ -1,0 +1,83 @@
+{
+  "samples": 16,
+  "max_abs_error": 0.0,
+  "manual_formula": "G2 static-aware q99: width<=1e-3 maps to zero; other dims 2*(x-q01)/(q99-q01)-1, clamp [-2.2,2.2]",
+  "statistics": "/data/tzq/starVLA_checkpoints/agibot_g2_rollingflow_h64_c16_b64_mb4_ga4_scratch_30k_20261010/dataset_statistics.json",
+  "dynamic_dimensions": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "comparisons": [
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0000-6b92ddbe.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0001-71a65940.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0002-9846a465.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0003-879bb36d.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0004-51204591.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0005-f7e8eb3f.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0006-add2d947.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/5704115d42564a56a97873a9edcfc9b7-0007-8c09d1c0.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0000-c174a1c1.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0001-be16af18.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0002-05055267.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0003-de49f471.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0004-f888040a.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0005-27b2a28a.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0006-99bf95c7.npz",
+      "max_abs_error": 0.0
+    },
+    {
+      "path": "work_dirs/eva_validation/deployment_20261014/policy_trace/78e87067a807475aa6ee945052e45d41-0007-4da0484f.npz",
+      "max_abs_error": 0.0
+    }
+  ]
+}

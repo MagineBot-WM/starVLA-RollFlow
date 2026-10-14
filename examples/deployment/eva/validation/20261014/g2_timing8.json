@@ -1,0 +1,506 @@
+{
+  "physical_robot_actions": false,
+  "action_socket_created": false,
+  "physics_simulated": false,
+  "scope": "native EVA scheduling + actual model RPC at target Hz; memory sensor/output excludes ZMQ/GDK overhead",
+  "config": "examples/deployment/eva/configs/agibot_g2_live.py",
+  "target_hz": 30,
+  "commands_issued": 128,
+  "session_steps": 128,
+  "server": {
+    "env": "starvla_eva_contract_server",
+    "ckpt_path": "/data/tzq/starVLA_checkpoints/agibot_g2_rollingflow_h64_c16_b64_mb4_ga4_scratch_30k_20261010/final_model/pytorch_model.pt",
+    "action_chunk_size": 16,
+    "available_unnorm_keys": [
+      "agibot_g2"
+    ],
+    "default_unnorm_key": "agibot_g2",
+    "training_data_mix": "agibot_g2_white_carton_place",
+    "training_obs_image_size": [
+      224,
+      224
+    ],
+    "eval_image_contract": "Eval clients must explicitly choose image count and order. The server does not infer or reorder camera views from training config.",
+    "action_keys": [
+      "action.left_arm",
+      "action.left_gripper",
+      "action.right_arm",
+      "action.right_gripper",
+      "action.head",
+      "action.waist"
+    ],
+    "state_keys": [
+      "state.left_arm",
+      "state.left_gripper",
+      "state.right_arm",
+      "state.right_gripper",
+      "state.head",
+      "state.waist"
+    ],
+    "contract_name": "agibot_g2_rollflow_h64_c16_async",
+    "contract": {
+      "name": "agibot_g2_rollflow_h64_c16_async",
+      "protocol": "starvla_eva_contract_v2",
+      "robot": "agibot_g2",
+      "cameras": [
+        {
+          "eva_key": "top_head",
+          "training_key": "video.top_head"
+        },
+        {
+          "eva_key": "hand_left",
+          "training_key": "video.hand_left"
+        },
+        {
+          "eva_key": "hand_right",
+          "training_key": "video.hand_right"
+        }
+      ],
+      "image": {
+        "hw": [
+          224,
+          224
+        ],
+        "color": "rgb",
+        "resize": "direct",
+        "interpolation": "bicubic",
+        "rotate_180": false
+      },
+      "state": {
+        "include": true,
+        "raw_dim": 24,
+        "fields": [
+          {
+            "training_key": "state.left_arm",
+            "slice": [
+              0,
+              7
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.left_gripper",
+            "slice": [
+              7,
+              8
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.right_arm",
+            "slice": [
+              8,
+              15
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.right_gripper",
+            "slice": [
+              15,
+              16
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.head",
+            "slice": [
+              16,
+              19
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.waist",
+            "slice": [
+              19,
+              24
+            ],
+            "units": "rad"
+          }
+        ]
+      },
+      "action": {
+        "mode": "joint",
+        "dim": 24,
+        "chunk_size": 16,
+        "unnorm_key": "agibot_g2",
+        "training_keys": [
+          "action.left_arm",
+          "action.left_gripper",
+          "action.right_arm",
+          "action.right_gripper",
+          "action.head",
+          "action.waist"
+        ],
+        "semantics": "absolute_joint_position",
+        "fields": [
+          {
+            "training_key": "action.left_arm",
+            "slice": [
+              0,
+              7
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.left_gripper",
+            "slice": [
+              7,
+              8
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.right_arm",
+            "slice": [
+              8,
+              15
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.right_gripper",
+            "slice": [
+              15,
+              16
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.head",
+            "slice": [
+              16,
+              19
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.waist",
+            "slice": [
+              19,
+              24
+            ],
+            "units": "rad"
+          }
+        ]
+      },
+      "model": {
+        "framework": "QwenGR00TRollingFlow",
+        "horizon": 64,
+        "inference_steps": 4
+      },
+      "inference_kwargs": {},
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 16,
+        "control_hz": 30,
+        "timing": "fixed_rate",
+        "scheduling": "async_prefetch",
+        "prefetch_after_steps": 8,
+        "aggregation": "none"
+      },
+      "eva": {
+        "robot_type": "agibot_g2",
+        "source_color": "bgr",
+        "obs_space": "JointState",
+        "action_space": "JointState",
+        "gripper": {
+          "threshold": -0.4,
+          "open": 0.0,
+          "close": -0.785
+        },
+        "joint_names": [
+          "idx21_arm_l_joint1",
+          "idx22_arm_l_joint2",
+          "idx23_arm_l_joint3",
+          "idx24_arm_l_joint4",
+          "idx25_arm_l_joint5",
+          "idx26_arm_l_joint6",
+          "idx27_arm_l_joint7",
+          "idx41_gripper_l_outer_joint1",
+          "idx61_arm_r_joint1",
+          "idx62_arm_r_joint2",
+          "idx63_arm_r_joint3",
+          "idx64_arm_r_joint4",
+          "idx65_arm_r_joint5",
+          "idx66_arm_r_joint6",
+          "idx67_arm_r_joint7",
+          "idx81_gripper_r_outer_joint1",
+          "idx11_head_joint1",
+          "idx12_head_joint2",
+          "idx13_head_joint3",
+          "idx01_body_joint1",
+          "idx02_body_joint2",
+          "idx03_body_joint3",
+          "idx04_body_joint4",
+          "idx05_body_joint5"
+        ],
+        "state_groups": [
+          {
+            "name": "left_arm",
+            "slice": [
+              0,
+              8
+            ]
+          },
+          {
+            "name": "right_arm",
+            "slice": [
+              8,
+              16
+            ]
+          },
+          {
+            "name": "head",
+            "slice": [
+              16,
+              19
+            ]
+          },
+          {
+            "name": "body",
+            "slice": [
+              19,
+              24
+            ]
+          }
+        ],
+        "hardware_node": "examples/hardware/agibot_g2/node.py",
+        "hardware_joint_names": [
+          "idx21_arm_l_joint1",
+          "idx22_arm_l_joint2",
+          "idx23_arm_l_joint3",
+          "idx24_arm_l_joint4",
+          "idx25_arm_l_joint5",
+          "idx26_arm_l_joint6",
+          "idx27_arm_l_joint7",
+          "idx31_gripper_l_inner_joint1",
+          "idx61_arm_r_joint1",
+          "idx62_arm_r_joint2",
+          "idx63_arm_r_joint3",
+          "idx64_arm_r_joint4",
+          "idx65_arm_r_joint5",
+          "idx66_arm_r_joint6",
+          "idx67_arm_r_joint7",
+          "idx71_gripper_r_inner_joint1",
+          "idx11_head_joint1",
+          "idx12_head_joint2",
+          "idx13_head_joint3",
+          "idx01_body_joint1",
+          "idx02_body_joint2",
+          "idx03_body_joint3",
+          "idx04_body_joint4",
+          "idx05_body_joint5"
+        ],
+        "action_socket_role": "bind",
+        "initial_qpos": [
+          0.038728971034288406,
+          -0.003492203075438738,
+          -0.1708402782678604,
+          -2.2650630474090576,
+          -0.3486744463443756,
+          0.2596842646598816,
+          -0.3717958331108093,
+          -0.7850000262260437,
+          -1.9285929203033447,
+          -1.3674280643463135,
+          1.7145602703094482,
+          -2.0340898036956787,
+          -1.2291909456253052,
+          -0.13853931427001953,
+          -0.07228998839855194,
+          -0.7835782766342163,
+          0.002070546615868807,
+          0.0,
+          0.31518319249153137,
+          -0.05135408416390419,
+          0.053572412580251694,
+          0.41591405868530273,
+          0.0,
+          0.0
+        ],
+        "initial_qpos_source": "median first state of the 100 training episodes, excluding 9 validation episodes; rad"
+      }
+    },
+    "contract_sha256": "22bd706acd320f1badca298aae8c84a5debbadcec109ea38a19acfbba717e8f2",
+    "stream_policy": "single_connection_with_reset_on_connect_and_disconnect",
+    "capabilities": {
+      "reset": true,
+      "chunk_sequence": true,
+      "trace": true,
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 16,
+        "control_hz": 30,
+        "timing": "fixed_rate",
+        "scheduling": "async_prefetch",
+        "prefetch_after_steps": 8,
+        "aggregation": "none"
+      }
+    },
+    "runtime_identity": {
+      "checkpoint_file": {
+        "path": "/data/tzq/starVLA_checkpoints/agibot_g2_rollingflow_h64_c16_b64_mb4_ga4_scratch_30k_20261010/final_model/pytorch_model.pt",
+        "size_bytes": 2500076331,
+        "mtime_ns": 1791721476063839042
+      },
+      "resolved_training_config_sha256": "e0641e2fe126f8608ac9c4953b7dea1c10a0bdf276e8d355e91affb832c5d0d5",
+      "sources": [
+        {
+          "path": "/data/tzq/starVLA-RollFlow/deployment/model_server/policy_wrapper.py",
+          "sha256": "1acc1d9dd0c4b34a565da530ea8c03ff5800ce4dba1405e08b5dd0d69e263c80"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/examples/realRobots/AgiBotG2/train_files/data_registry/data_config.py",
+          "sha256": "c49d66d49b9b5335c57c9efc1907c7c6cbd821ec4dac822ccb0b769f36441351"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/framework/VLM4A/QwenGR00TRollingFlow.py",
+          "sha256": "cf1679ee39886aaec8f2b787f3a860311cda5fbf38ccb8c36c3031d4880af9bb"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/modules/action_model/GR00T_RollFlowMatching_ActionHeader.py",
+          "sha256": "e621be68bb2c84efb54768f72b15a4d8fc65d8f1f8e9c33e9b82e8185f94f19c"
+        }
+      ]
+    },
+    "session_id": "be17ac95c04642209382d996b1b24bfb",
+    "protocol": "starvla_eva_contract_v2",
+    "server_name": "starvla-eva-contract",
+    "action_mode": "joint",
+    "action_dim": 24
+  },
+  "requests": [
+    {
+      "observation_step": 0,
+      "action_start": 0,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249774.422913215,
+      "completed_at": 5249775.817001785,
+      "latency_ms": 1394.0885700285435
+    },
+    {
+      "observation_step": 8,
+      "action_start": 16,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249776.027189231,
+      "completed_at": 5249776.40465769,
+      "latency_ms": 377.46845930814743
+    },
+    {
+      "observation_step": 24,
+      "action_start": 32,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249776.614449243,
+      "completed_at": 5249776.958571728,
+      "latency_ms": 344.1224852576852
+    },
+    {
+      "observation_step": 40,
+      "action_start": 48,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249777.169545469,
+      "completed_at": 5249777.545665737,
+      "latency_ms": 376.1202683672309
+    },
+    {
+      "observation_step": 56,
+      "action_start": 64,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249777.756227649,
+      "completed_at": 5249778.033819158,
+      "latency_ms": 277.5915088132024
+    },
+    {
+      "observation_step": 72,
+      "action_start": 80,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249778.290713418,
+      "completed_at": 5249778.602846138,
+      "latency_ms": 312.13271990418434
+    },
+    {
+      "observation_step": 88,
+      "action_start": 96,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249778.826370334,
+      "completed_at": 5249779.193218994,
+      "latency_ms": 366.8486597016454
+    },
+    {
+      "observation_step": 104,
+      "action_start": 112,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249779.405257621,
+      "completed_at": 5249779.695871935,
+      "latency_ms": 290.6143143773079
+    },
+    {
+      "observation_step": 120,
+      "action_start": 128,
+      "observation_timestamp": null,
+      "source_timestamp": null,
+      "prefetch_after_steps": 8,
+      "requested_at": 5249779.939459031,
+      "completed_at": 5249780.221628539,
+      "latency_ms": 282.1695078164339
+    }
+  ],
+  "gaps": [
+    {
+      "action_start": 0,
+      "seconds": 1.3923054113984108
+    },
+    {
+      "action_start": 16,
+      "seconds": 0.08589938841760159
+    },
+    {
+      "action_start": 32,
+      "seconds": 0.05244740191847086
+    },
+    {
+      "action_start": 48,
+      "seconds": 0.08497886825352907
+    },
+    {
+      "action_start": 80,
+      "seconds": 0.02077607437968254
+    },
+    {
+      "action_start": 96,
+      "seconds": 0.07658302318304777
+    }
+  ],
+  "action_interval_ms": {
+    "p50": 33.39766524732113,
+    "p95": 33.842809684574604,
+    "max": 119.45830751210451
+  },
+  "chunk_boundary_intervals_ms": [
+    119.45830751210451,
+    86.48011367768049,
+    118.41901298612356,
+    33.51909015327692,
+    54.27818465977907,
+    110.49745231866837,
+    34.35212094336748
+  ]
+}

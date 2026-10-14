@@ -1,13 +1,13 @@
 # EVA × StarVLA 部署与迁移
 
-版本：`eva-deploy-20261013`。服务器使用本仓库，机器人端使用随仓库提供的 EVA 和桥接扩展。
+当前主入口为 `examples/deployment/eva`，复用两边现有通信，提供部署集成与验证。原标签 `eva-deploy-20261013` 的验证记录保留。模型机和机器人机独立运行、独立更新；契约与部署模块两端同步。
 
 ## 1. 目录与职责
 
 | 路径 | 部署位置 | 内容 |
 | --- | --- | --- |
 | `EVA-CLIENT/` | 机器人端／仿真端 | 用户提供的 EVA 源码、配置、机器人模型资产、硬件节点、许可证 |
-| `examples/realRobots/EvaClient/` | 两端 | contract、EVA 插件、StarVLA 服务入口、回放与仿真评估 |
+| `examples/deployment/eva/` | 两端 | contract、EVA 插件、StarVLA 服务入口、回放与仿真评估 |
 | `examples/realRobots/AgiBotG2/` | 模型服务器 | G2 数据注册、固定关节归一化、100/9 训练验证划分、训练配方 |
 | `starVLA/model/` | 模型服务器 | 权重所用的框架、VLM 和动作头；包含独立 pure rolling-flow |
 | `deployment/model_server/` | 模型服务器 | 原有模型加载、归一化和 WebSocket 服务实现 |
@@ -44,7 +44,7 @@ MODEL_RUN/
 
 `config.yaml` 中的 `framework.qwenvl.base_vlm` 要指向新机器上的对应 Qwen 模型。保留训练所得 `dataset_statistics.json` 和模型参数设置。G2 服务还依赖本版本的 G2 registry 与 `AGIBOT_G2` 本体注册。
 
-迁移到已有 EVA 仓库时，将其放在仓库根目录的 `EVA-CLIENT/`。若通过 `--eva-root` 指定其他路径，还需调整配置的 `_base_`：配置继承路径与启动参数分别解析。建议先使用本版本随附的 EVA 源码，因为任意更新版 EVA 的接口兼容性尚未验证。
+迁移到已有 EVA 仓库时，将其放在仓库根目录的 `EVA-CLIENT/`。通过 `--eva-root` 可指定独立 checkout；启动器为配置继承设置 EVA 根目录。更新后先运行 doctor、CPU 接口测试，再运行 G2 回放与 LIBERO 回归。接口变化集中适配在 `adapters/`，不承诺未来任意版本自动兼容。
 
 ## 3. G2 真机部署
 
@@ -57,9 +57,9 @@ export STARVLA_MODEL_PYTHON=/path/to/starvla-env/bin/python
 export G2_CHECKPOINT=/path/to/MODEL_RUN/final_model/pytorch_model.pt
 
 CUDA_VISIBLE_DEVICES=0 "$STARVLA_MODEL_PYTHON" \
-  -m examples.realRobots.EvaClient.contract_server \
+  -m examples.deployment.eva.contract_server \
   --checkpoint "$G2_CHECKPOINT" \
-  --contract examples/realRobots/EvaClient/contracts/agibot_g2_rollflow_h64_c16.json \
+  --contract examples/deployment/eva/contracts/agibot_g2_rollflow_h64_c16_async.json \
   --device cuda:0 --host 0.0.0.0 --port 10094
 ```
 
@@ -81,10 +81,13 @@ AGIBOT_GDK_LOCAL_PATH=/path/to/agibot-gdk \
 
 PYTHONPATH="$PWD/EVA-CLIENT/src" \
   EVA-CLIENT/examples/hardware/agibot_g2/.venv/bin/python \
-  EVA-CLIENT/examples/hardware/agibot_g2/node.py
+  -m examples.deployment.eva hardware --eva-root "$PWD/EVA-CLIENT" \
+  --obs-endpoint tcp://127.0.0.1:5555 --action-endpoint tcp://127.0.0.1:5556
 ```
 
-硬件节点默认绑定本机 `5555` 观测端口、`5556` 动作端口，适用于 EVA 与硬件节点同机。分机部署时用节点的 `--obs-endpoint / --action-endpoint` 改绑定地址，并在 EVA 配置对应连接地址。
+硬件节点绑定本机 `5555` 观测端口，连接EVA绑定的 `5556` 动作端口，适用于 EVA 与硬件节点同机。该外部入口只调整动作socket角色，观测/GDK/伺服复用原生代码。不要同时运行直接绑定5556的旧节点。
+
+若EVA与硬件节点也分机：硬件观测绑定 `tcp://0.0.0.0:5555`，EVA的 `G2_OBS_ENDPOINT` 连接硬件IP；EVA的 `G2_ACTION_ENDPOINT` 绑定 `tcp://0.0.0.0:5556`，硬件 `--action-endpoint` 连接EVA的CPU机器IP。StarVLA服务器仍位于独立GPU机器。
 
 另一个终端从包／仓库根目录启动 EVA：
 
@@ -94,16 +97,27 @@ export STARVLA_PORT=10094
 export G2_OBS_ENDPOINT=tcp://127.0.0.1:5555
 export G2_ACTION_ENDPOINT=tcp://127.0.0.1:5556
 
-EVA-CLIENT/.venv/bin/python -m examples.realRobots.EvaClient.run_eva \
-  --config examples/realRobots/EvaClient/configs/agibot_g2_live.py \
+EVA-CLIENT/.venv/bin/python -m examples.deployment.eva.run_eva \
+  --config examples/deployment/eva/configs/agibot_g2_live.py \
   --web-port 8080
 ```
 
-配置中的任务文本是本次训练任务：“Pick up the white carton and place it inside the large tan carton on the left.” G2 三相机按 `top_head / hand_left / hand_right` 排列，BGR→RGB 一次、Pillow 默认 bicubic 直接缩放至 224×224。状态原样发送，由服务端处理。`StarVlaRollingStrategy` 完整执行 16 步后请求新观测，连接与回合开始时重置缓存。
+配置中的任务文本是本次训练任务：“Pick up the white carton and place it inside the large tan carton on the left.” G2 三相机按 `top_head / hand_left / hand_right` 排列，BGR→RGB 一次、Pillow 默认 bicubic 直接缩放至 224×224。状态原样发送，由服务端处理。`StarVlaAsyncRollingStrategy` 默认发出第8步后用真实观测预取下一段，当前完整16步发完再接入；连接与回合开始时重置缓存。默认不裁切动作、不做时间集成。
+
+先运行只读采样确认真实输入：
+
+```bash
+EVA-CLIENT/.venv/bin/python -m examples.deployment.eva capture \
+  --count 3 --output work_dirs/eva_validation/live_inputs.json
+```
+
+NPZ包含原图、原始状态和最终模型图像；没有模型请求或动作socket。启动客户端时加 `--trace-dir work_dirs/eva_validation/live_trace`，同时记录模型输入、原始预测、EVA处理后chunk和已发命令。
+
+G2按30Hz目标发布完整16步，关闭逐步关节到位等待。默认第8步预取，迟到时仍有边界等待，真实动作时序需用执行日志测量。详细配置、4步预取选项和交接见 [G2异步部署](../examples/deployment/eva/G2_ASYNC_DEPLOYMENT.md)。完整动作链路回归和限制见 [2026-10-14报告](../examples/deployment/eva/validation_report_20261014.md)。
 
 ## 4. 用 G2 保留数据检查输入和动作
 
-在已安装 EVA 数据回放依赖的 Python 3.11 环境运行，G2 策略服务器保持运行：
+此节同步基线服务器使用 `agibot_g2_rollflow_h64_c16.json`；默认异步服务使用交接文档中的 `async-replay`。在已安装 EVA 数据回放依赖的 Python 3.11 环境运行：
 
 ```bash
 export EVA_PYTHON="$PWD/EVA-CLIENT/.venv/bin/python"
@@ -111,7 +125,7 @@ export STARVLA_HOST=MODEL_SERVER_IP
 export STARVLA_PORT=10094
 export STARVLA_G2_DATASET=/path/to/white_carton_to_left_tan_carton_20261009
 
-"$EVA_PYTHON" -m examples.realRobots.EvaClient.evaluate_dataset_via_eva \
+"$EVA_PYTHON" -m examples.deployment.eva.evaluate_dataset_via_eva \
   --dataset "$STARVLA_G2_DATASET" \
   --episodes 0,13,27,40,54,67,81,94,108 \
   --output work_dirs/eva_validation/g2_replay.json
@@ -126,7 +140,7 @@ export STARVLA_G2_DATASET=/path/to/white_carton_to_left_tan_carton_20261009
 ```bash
 export EVA_EVAL_ENV=/path/to/eva-eval-env
 export LIBERO_CHECKOUT=/path/to/LIBERO
-bash examples/realRobots/EvaClient/setup_eval_environment.sh \
+bash examples/deployment/eva/setup_eval_environment.sh \
   "$EVA_EVAL_ENV" "$LIBERO_CHECKOUT"
 ```
 
@@ -134,9 +148,9 @@ bash examples/realRobots/EvaClient/setup_eval_environment.sh \
 
 ```bash
 export LIBERO_CHECKPOINT=/path/to/LIBERO_MODEL_RUN/checkpoints/steps_55000_pytorch_model.pt
-"$STARVLA_MODEL_PYTHON" -m examples.realRobots.EvaClient.contract_server \
+"$STARVLA_MODEL_PYTHON" -m examples.deployment.eva.contract_server \
   --checkpoint "$LIBERO_CHECKPOINT" \
-  --contract examples/realRobots/EvaClient/contracts/libero_rollflow_h32_c8_k4.json \
+  --contract examples/deployment/eva/contracts/libero_rollflow_h32_c8_k4.json \
   --device cuda:0 --port 10093
 ```
 
@@ -151,8 +165,8 @@ export MUJOCO_GL=osmesa PYOPENGL_PLATFORM=osmesa
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
 
-"$EVA_EVAL_ENV/bin/python" -m examples.realRobots.EvaClient.evaluate_libero_via_eva \
-  --config examples/realRobots/EvaClient/configs/libero_sim_verified.py \
+"$EVA_EVAL_ENV/bin/python" -m examples.deployment.eva.evaluate_libero_via_eva \
+  --config examples/deployment/eva/configs/libero_sim_verified.py \
   --suite libero_goal --task-ids 0,1 --episodes-per-task 2 --policy-seed 7 \
   --output work_dirs/eva_validation/libero_rollout.json \
   --video-dir work_dirs/eva_validation/videos
@@ -160,17 +174,17 @@ export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
 
 LIBERO 每次执行 8 个动作，下一观测来自动作后的仿真状态。7D 输出是 Cartesian delta，使用 LIBERO 的夹爪转换；它的 contract 中 `mode=joint` 表示 EVA 透传向量，不表示真实关节角。
 
-原生接口核对命令及代码在 [EvaClient README](../examples/realRobots/EvaClient/README.md)。核对两边共用策略服务器，验证 EVA 图像适配、chunk 调度和夹爪处理。
+原生接口核对命令及代码在 [EvaClient README](../examples/deployment/eva/README.md)。核对两边共用策略服务器，验证 EVA 图像适配、chunk 调度和夹爪处理。
 
 ## 6. 打包机器人端
 
 在含本版本提交的仓库运行：
 
 ```bash
-bash scripts/package_eva_deployment.sh eva-deploy-20261013
+bash scripts/package_eva_deployment.sh HEAD
 ```
 
-输出 `dist/eva-starvla-client-<commit>.zip`。它从指定 Git 提交导出 EVA、桥接插件、contract、部署说明和验证记录；不会把本机环境与未提交改动混入包。解压后保持 `EVA-CLIENT/` 与 `examples/realRobots/EvaClient/` 的相对布局，从解压目录执行模块命令。
+输出 `dist/eva-starvla-client-<commit>.zip`。它从指定 Git 提交导出 EVA、部署插件、contract、部署说明和验证记录；不会把本机环境与未提交改动混入包。解压后保持 `EVA-CLIENT/` 与 `examples/deployment/eva/` 的相对布局，从解压目录执行模块命令。
 
 客户端包用于 EVA 执行端。策略服务器仍使用完整本仓库及训练所得权重、配置、归一化统计。源 ZIP、模型权重、录制数据、Python 环境和另行提供的 GDK 不在部署包内。
 
@@ -178,4 +192,22 @@ bash scripts/package_eva_deployment.sh eva-deploy-20261013
 
 已有结果：[验证报告](../examples/realRobots/EvaClient/validation_report_20261013.md)；EVA 来源：[source.json](../examples/realRobots/EvaClient/eva_source.json)；本次整理范围：[版本说明](releases/eva-deploy-20261013.md)。
 
-G2 九条回放得到 MSE 0.002755、RMSE 0.05249；LIBERO 两个任务共 4 次闭环执行成功 3 次。38 个 chunk 的原生接口核对中，图像、原始动作和处理后动作差异为 0。它们是 2026-10-13 工作区的既有验证记录，本次打包整理没有重新运行 GPU 推理或完整 benchmark。
+G2 九条回放得到 MSE 0.002755、RMSE 0.05249；LIBERO 两个任务共 4 次闭环执行成功 3 次。38 个 chunk 的原生接口核对中，图像、原始动作和处理后动作差异为 0。它们是 2026-10-13 工作区的既有验证记录，原标签打包时没有重新运行推理。部署模块迁移后的回归见 [新验证记录](../examples/deployment/eva/validation_report_20261013.md)：CPU接口、G2回放和LIBERO闭环重新验证，完整benchmark未重跑。
+
+## 8. 更新兼容检查
+
+机器人端与模型机无需共享 Python 环境。部署模块是外部集成层；V2 复用原有 WebSocket/MessagePack envelope 增加契约、会话和 chunk 顺序校验。
+
+```bash
+"$EVA_PYTHON" -m examples.deployment.eva doctor \
+  --eva-root "$EVA_CHECKOUT" \
+  --config examples/deployment/eva/configs/agibot_g2_live.py \
+  --output work_dirs/eva_validation/doctor.json
+"$EVA_PYTHON" -m pytest examples/deployment/eva/tests -q
+```
+
+配置中的图像处理、控制频率、夹爪参数与执行步数由共享契约派生。实时输入使用单个完整观测消息，缺相机/状态即报错；时间戳不再前进时拒绝旧输入。模型请求超时关闭该流，重连和重置后继续。
+
+升级任一项目后，按 CPU → 保留数据 → 仿真闭环逐层回归。数组形状正确并不能证明单位、坐标系或实测硬件反馈正确；现有 ZMQ 没有动作执行确认，协议 chunk 序号只校验策略请求。完整说明与新本体/算法扩展边界见 [部署模块](../examples/deployment/eva/README.md)。
+
+导出器只打包已提交内容；本地新修改必须先提交，才会进入 HEAD 部署包。旧标签的 ZIP 仍对应旧实现。

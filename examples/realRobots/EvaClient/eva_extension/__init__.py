@@ -1,8 +1,9 @@
-"""Additive plugins for an external EVA-CLIENT checkout."""
+"""Compatibility import for examples.deployment.eva.eva_extension."""
 
-from .libero_sim import LiberoSimTransport, LiberoVirtualRobot
-from .starvla_policy import StarVlaEvaPolicyClient
-from .image_transport import ContractDatasetTransport, ContractZmqTransport
-from .rolling_strategy import StarVlaRollingStrategy
+from examples.deployment.eva.eva_extension import *  # noqa: F401,F403
 
-__all__ = ["LiberoSimTransport", "LiberoVirtualRobot", "StarVlaEvaPolicyClient"]
+import importlib as _importlib
+_implementation = _importlib.import_module("examples.deployment.eva.eva_extension")
+
+def __getattr__(name):
+    return getattr(_implementation, name)

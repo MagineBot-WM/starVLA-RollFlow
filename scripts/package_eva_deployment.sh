@@ -16,7 +16,7 @@ fi
 mkdir -p "${eva_package_repo}/dist"
 git archive --format=zip --prefix="${eva_package_name}/" \
   --output="$eva_package_output" "$eva_package_commit" -- \
-  EVA-CLIENT examples/realRobots/EvaClient examples/realRobots/AgiBotG2 \
+  EVA-CLIENT examples/deployment examples/realRobots/EvaClient examples/realRobots/AgiBotG2 \
   README.md LICENSE INTEGRATION_README.md \
   docs/eva_deployment.md docs/releases/eva-deploy-20261013.md
 printf 'Commit: %s\nPackage: %s\n' "$eva_package_commit" "$eva_package_output"

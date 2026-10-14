@@ -1,0 +1,1707 @@
+{
+  "config": "/data/tzq/starVLA-RollFlow/examples/deployment/eva/configs/g2_replay.py",
+  "dataset": "/data/tzq/datasets/starVLA/Datasets/AgiBotG2/white_carton_to_left_tan_carton_20261009",
+  "server": {
+    "env": "starvla_eva_contract_server",
+    "ckpt_path": "/data/tzq/starVLA_checkpoints/agibot_g2_rollingflow_h64_c16_b64_mb4_ga4_scratch_30k_20261010/final_model/pytorch_model.pt",
+    "action_chunk_size": 16,
+    "available_unnorm_keys": [
+      "agibot_g2"
+    ],
+    "default_unnorm_key": "agibot_g2",
+    "training_data_mix": "agibot_g2_white_carton_place",
+    "training_obs_image_size": [
+      224,
+      224
+    ],
+    "eval_image_contract": "Eval clients must explicitly choose image count and order. The server does not infer or reorder camera views from training config.",
+    "action_keys": [
+      "action.left_arm",
+      "action.left_gripper",
+      "action.right_arm",
+      "action.right_gripper",
+      "action.head",
+      "action.waist"
+    ],
+    "state_keys": [
+      "state.left_arm",
+      "state.left_gripper",
+      "state.right_arm",
+      "state.right_gripper",
+      "state.head",
+      "state.waist"
+    ],
+    "contract_name": "agibot_g2_rollflow_h64_c16",
+    "contract": {
+      "name": "agibot_g2_rollflow_h64_c16",
+      "protocol": "starvla_eva_contract_v2",
+      "robot": "agibot_g2",
+      "cameras": [
+        {
+          "eva_key": "top_head",
+          "training_key": "video.top_head"
+        },
+        {
+          "eva_key": "hand_left",
+          "training_key": "video.hand_left"
+        },
+        {
+          "eva_key": "hand_right",
+          "training_key": "video.hand_right"
+        }
+      ],
+      "image": {
+        "hw": [
+          224,
+          224
+        ],
+        "color": "rgb",
+        "resize": "direct",
+        "interpolation": "bicubic",
+        "rotate_180": false
+      },
+      "state": {
+        "include": true,
+        "raw_dim": 24,
+        "fields": [
+          {
+            "training_key": "state.left_arm",
+            "slice": [
+              0,
+              7
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.left_gripper",
+            "slice": [
+              7,
+              8
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.right_arm",
+            "slice": [
+              8,
+              15
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.right_gripper",
+            "slice": [
+              15,
+              16
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.head",
+            "slice": [
+              16,
+              19
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "state.waist",
+            "slice": [
+              19,
+              24
+            ],
+            "units": "rad"
+          }
+        ]
+      },
+      "action": {
+        "mode": "joint",
+        "dim": 24,
+        "chunk_size": 16,
+        "unnorm_key": "agibot_g2",
+        "training_keys": [
+          "action.left_arm",
+          "action.left_gripper",
+          "action.right_arm",
+          "action.right_gripper",
+          "action.head",
+          "action.waist"
+        ],
+        "semantics": "absolute_joint_position",
+        "fields": [
+          {
+            "training_key": "action.left_arm",
+            "slice": [
+              0,
+              7
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.left_gripper",
+            "slice": [
+              7,
+              8
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.right_arm",
+            "slice": [
+              8,
+              15
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.right_gripper",
+            "slice": [
+              15,
+              16
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.head",
+            "slice": [
+              16,
+              19
+            ],
+            "units": "rad"
+          },
+          {
+            "training_key": "action.waist",
+            "slice": [
+              19,
+              24
+            ],
+            "units": "rad"
+          }
+        ]
+      },
+      "model": {
+        "framework": "QwenGR00TRollingFlow",
+        "horizon": 64,
+        "inference_steps": 4
+      },
+      "inference_kwargs": {},
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 16,
+        "control_hz": 30
+      },
+      "eva": {
+        "robot_type": "agibot_g2",
+        "source_color": "bgr",
+        "obs_space": "JointState",
+        "action_space": "JointState",
+        "gripper": {
+          "threshold": -0.4,
+          "open": 0.0,
+          "close": -0.785
+        },
+        "joint_names": [
+          "idx21_arm_l_joint1",
+          "idx22_arm_l_joint2",
+          "idx23_arm_l_joint3",
+          "idx24_arm_l_joint4",
+          "idx25_arm_l_joint5",
+          "idx26_arm_l_joint6",
+          "idx27_arm_l_joint7",
+          "idx41_gripper_l_outer_joint1",
+          "idx61_arm_r_joint1",
+          "idx62_arm_r_joint2",
+          "idx63_arm_r_joint3",
+          "idx64_arm_r_joint4",
+          "idx65_arm_r_joint5",
+          "idx66_arm_r_joint6",
+          "idx67_arm_r_joint7",
+          "idx81_gripper_r_outer_joint1",
+          "idx11_head_joint1",
+          "idx12_head_joint2",
+          "idx13_head_joint3",
+          "idx01_body_joint1",
+          "idx02_body_joint2",
+          "idx03_body_joint3",
+          "idx04_body_joint4",
+          "idx05_body_joint5"
+        ],
+        "state_groups": [
+          {
+            "name": "left_arm",
+            "slice": [
+              0,
+              8
+            ]
+          },
+          {
+            "name": "right_arm",
+            "slice": [
+              8,
+              16
+            ]
+          },
+          {
+            "name": "head",
+            "slice": [
+              16,
+              19
+            ]
+          },
+          {
+            "name": "body",
+            "slice": [
+              19,
+              24
+            ]
+          }
+        ]
+      }
+    },
+    "contract_sha256": "fafcd10c205ad4d5c8ce53f68932c961f7901f9db542fcb442d4545d3b04f5db",
+    "stream_policy": "single_connection_with_reset_on_connect_and_disconnect",
+    "capabilities": {
+      "reset": true,
+      "chunk_sequence": true,
+      "trace": true,
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 16,
+        "control_hz": 30
+      }
+    },
+    "runtime_identity": {
+      "checkpoint_file": {
+        "path": "/data/tzq/starVLA_checkpoints/agibot_g2_rollingflow_h64_c16_b64_mb4_ga4_scratch_30k_20261010/final_model/pytorch_model.pt",
+        "size_bytes": 2500076331,
+        "mtime_ns": 1791721476063839042
+      },
+      "resolved_training_config_sha256": "e0641e2fe126f8608ac9c4953b7dea1c10a0bdf276e8d355e91affb832c5d0d5",
+      "sources": [
+        {
+          "path": "/data/tzq/starVLA-RollFlow/deployment/model_server/policy_wrapper.py",
+          "sha256": "1acc1d9dd0c4b34a565da530ea8c03ff5800ce4dba1405e08b5dd0d69e263c80"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/examples/realRobots/AgiBotG2/train_files/data_registry/data_config.py",
+          "sha256": "c49d66d49b9b5335c57c9efc1907c7c6cbd821ec4dac822ccb0b769f36441351"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/framework/VLM4A/QwenGR00TRollingFlow.py",
+          "sha256": "cf1679ee39886aaec8f2b787f3a860311cda5fbf38ccb8c36c3031d4880af9bb"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/modules/action_model/GR00T_RollFlowMatching_ActionHeader.py",
+          "sha256": "e621be68bb2c84efb54768f72b15a4d8fc65d8f1f8e9c33e9b82e8185f94f19c"
+        }
+      ]
+    },
+    "session_id": "da35bc832a77400a99f8dfd934a41170",
+    "protocol": "starvla_eva_contract_v2",
+    "server_name": "starvla-eva-contract",
+    "action_mode": "joint",
+    "action_dim": 24
+  },
+  "episodes_requested": [
+    0,
+    13,
+    27,
+    40,
+    54,
+    67,
+    81,
+    94,
+    108
+  ],
+  "episode_metrics": {
+    "0": {
+      "actions_scored": 288,
+      "mse": 0.005160330816586006,
+      "mae": 0.02242417828340506,
+      "rmse": 0.07183544262121593,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9964416709662444,
+      "per_dimension_rmse": [
+        3.725290298461914e-09,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0798350320644487,
+        0.020266053403254405,
+        0.0510842168118612,
+        0.09795101113472622,
+        0.058798785220770866,
+        0.06806784655415661,
+        0.20231447376145217,
+        0.23630046273573904,
+        0.00010189920041153632,
+        0.0,
+        4.795090222934932e-05,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "13": {
+      "actions_scored": 347,
+      "mse": 0.0023572716782210216,
+      "mae": 0.013029280722443878,
+      "rmse": 0.04855174227791441,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9983375901982998,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.06924878185731875,
+        0.017970918877703756,
+        0.031966658764372116,
+        0.07411671732143577,
+        0.03624193546861023,
+        0.04265035164916073,
+        0.06773452395997949,
+        0.19292618335518294,
+        8.284843625690682e-05,
+        0.0,
+        4.793699493376572e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "27": {
+      "actions_scored": 224,
+      "mse": 0.003060625133089996,
+      "mae": 0.014898529649388235,
+      "rmse": 0.0553229168888445,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9979960099292544,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.09097243486207039,
+        0.010371463030547118,
+        0.03369533394163084,
+        0.08327117120435526,
+        0.04091878564193927,
+        0.060181068576107014,
+        0.0638664819031407,
+        0.21823593699759614,
+        0.00016285896413930617,
+        0.0,
+        4.792213439941406e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "40": {
+      "actions_scored": 290,
+      "mse": 0.0010603214857967803,
+      "mae": 0.009576094619231968,
+      "rmse": 0.032562577996786135,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9992949765408098,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.04668888402338354,
+        0.013086004578166506,
+        0.026844257642238495,
+        0.05286455070126811,
+        0.03672723139161242,
+        0.042212880369309716,
+        0.06941207541307197,
+        0.10785377660301508,
+        0.00023006065748631954,
+        0.0,
+        4.795193672180176e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "54": {
+      "actions_scored": 291,
+      "mse": 0.0033112665179234357,
+      "mae": 0.014893799199901598,
+      "rmse": 0.05754360536083428,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9978551069014173,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.12058896866722432,
+        0.00947900554944961,
+        0.03663371387994534,
+        0.07163381007297712,
+        0.03044686717412997,
+        0.04199216435840149,
+        0.1293918473121115,
+        0.19731386579843102,
+        0.00021472621783855133,
+        0.0,
+        4.794569103417294e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "67": {
+      "actions_scored": 201,
+      "mse": 0.002073252517229877,
+      "mae": 0.012867315350651392,
+      "rmse": 0.045532982740315586,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9985987527390424,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.07361992868505694,
+        0.014998499431440526,
+        0.03517461357785395,
+        0.08343092996372715,
+        0.0408691507324087,
+        0.050834799384061345,
+        0.07879617977976257,
+        0.15953661424283797,
+        4.660920997433858e-05,
+        0.0,
+        4.795193672180176e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "81": {
+      "actions_scored": 231,
+      "mse": 0.002808093139820353,
+      "mae": 0.0148871004332242,
+      "rmse": 0.05299144402467584,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9980199000786282,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.1069854722838086,
+        0.024171207600374788,
+        0.047834839888331426,
+        0.0890592281537274,
+        0.042640838051257395,
+        0.033407295254512984,
+        0.08198696231073743,
+        0.18838316748567335,
+        9.082137163679967e-05,
+        0.0,
+        4.7929360906493216e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "94": {
+      "actions_scored": 227,
+      "mse": 0.001943752517205064,
+      "mae": 0.013229958325110426,
+      "rmse": 0.04408800876888254,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.9985483073224942,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0666265546318267,
+        0.02015602661774545,
+        0.03766873039175292,
+        0.07522009262277989,
+        0.05157164214694479,
+        0.06187747089074087,
+        0.06205806830578289,
+        0.15616669458280255,
+        5.764176887651309e-05,
+        0.0,
+        4.795193672180176e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "108": {
+      "actions_scored": 221,
+      "mse": 0.0028267959482554243,
+      "mae": 0.012976421171533373,
+      "rmse": 0.05316762123939178,
+      "max_abs_error": 0.7850000262260437,
+      "mean_action_vector_cosine": 0.998046214520111,
+      "per_dimension_rmse": [
+        0.0,
+        2.0954757928848267e-09,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.07274376894669704,
+        0.021931531218917662,
+        0.050710054198697584,
+        0.07598007301321469,
+        0.038478538395216096,
+        0.03537752067064915,
+        0.0602899551099953,
+        0.2176210383975852,
+        9.72624504589458e-05,
+        0.0,
+        4.793535219533515e-05,
+        0.0,
+        3.725290298461914e-09,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "chunks": [
+    {
+      "episode_id": 0,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 1634.2550422996283,
+      "rmse_after_eva_action_processing": 0.05152169615030289
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 281.7478124052286,
+      "rmse_after_eva_action_processing": 0.047941554337739944
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 377.0826030522585,
+      "rmse_after_eva_action_processing": 0.05491580441594124
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 391.5192745625973,
+      "rmse_after_eva_action_processing": 0.13347592949867249
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 396.44480030983686,
+      "rmse_after_eva_action_processing": 0.061694685369729996
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 304.0956137701869,
+      "rmse_after_eva_action_processing": 0.10144238919019699
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 387.4565623700619,
+      "rmse_after_eva_action_processing": 0.09222105890512466
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 301.61180440336466,
+      "rmse_after_eva_action_processing": 0.0493290089070797
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 397.05315977334976,
+      "rmse_after_eva_action_processing": 0.028906019404530525
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 468.5445502400398,
+      "rmse_after_eva_action_processing": 0.03219866007566452
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 386.26265805214643,
+      "rmse_after_eva_action_processing": 0.02421094849705696
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 398.9665163680911,
+      "rmse_after_eva_action_processing": 0.16688449680805206
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 420.7764817401767,
+      "rmse_after_eva_action_processing": 0.0591672882437706
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 208,
+      "valid_actions": 16,
+      "latency_ms": 292.38903522491455,
+      "rmse_after_eva_action_processing": 0.040601082146167755
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 224,
+      "valid_actions": 16,
+      "latency_ms": 337.42836862802505,
+      "rmse_after_eva_action_processing": 0.0393311083316803
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 240,
+      "valid_actions": 16,
+      "latency_ms": 290.1480635628104,
+      "rmse_after_eva_action_processing": 0.0494840070605278
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 256,
+      "valid_actions": 16,
+      "latency_ms": 345.08798085153103,
+      "rmse_after_eva_action_processing": 0.04003189504146576
+    },
+    {
+      "episode_id": 0,
+      "frame_index": 272,
+      "valid_actions": 16,
+      "latency_ms": 292.0141452923417,
+      "rmse_after_eva_action_processing": 0.03178606182336807
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 328.266154974699,
+      "rmse_after_eva_action_processing": 0.04957085847854614
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 369.0942795947194,
+      "rmse_after_eva_action_processing": 0.03248867392539978
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 332.1632146835327,
+      "rmse_after_eva_action_processing": 0.03428073599934578
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 308.6818102747202,
+      "rmse_after_eva_action_processing": 0.02404816262423992
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 345.72108648717403,
+      "rmse_after_eva_action_processing": 0.01889161951839924
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 371.5921901166439,
+      "rmse_after_eva_action_processing": 0.14066113531589508
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 379.40689269453287,
+      "rmse_after_eva_action_processing": 0.010068094357848167
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 378.78776993602514,
+      "rmse_after_eva_action_processing": 0.013139861635863781
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 368.72493475675583,
+      "rmse_after_eva_action_processing": 0.026117103174328804
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 431.0990860685706,
+      "rmse_after_eva_action_processing": 0.021771689876914024
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 373.32591507583857,
+      "rmse_after_eva_action_processing": 0.027688875794410706
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 447.58270401507616,
+      "rmse_after_eva_action_processing": 0.029130738228559494
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 287.82021906226873,
+      "rmse_after_eva_action_processing": 0.02014482580125332
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 208,
+      "valid_actions": 16,
+      "latency_ms": 334.1927984729409,
+      "rmse_after_eva_action_processing": 0.022836187854409218
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 224,
+      "valid_actions": 16,
+      "latency_ms": 378.0869571492076,
+      "rmse_after_eva_action_processing": 0.11897525936365128
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 240,
+      "valid_actions": 16,
+      "latency_ms": 313.6361511424184,
+      "rmse_after_eva_action_processing": 0.0464838482439518
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 256,
+      "valid_actions": 16,
+      "latency_ms": 319.5185046643019,
+      "rmse_after_eva_action_processing": 0.046051401644945145
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 272,
+      "valid_actions": 16,
+      "latency_ms": 277.01556123793125,
+      "rmse_after_eva_action_processing": 0.029358623549342155
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 288,
+      "valid_actions": 16,
+      "latency_ms": 294.5406883955002,
+      "rmse_after_eva_action_processing": 0.023460088297724724
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 304,
+      "valid_actions": 16,
+      "latency_ms": 298.1529217213392,
+      "rmse_after_eva_action_processing": 0.026914367452263832
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 320,
+      "valid_actions": 16,
+      "latency_ms": 336.5978114306927,
+      "rmse_after_eva_action_processing": 0.02431591972708702
+    },
+    {
+      "episode_id": 13,
+      "frame_index": 336,
+      "valid_actions": 11,
+      "latency_ms": 364.8780910298228,
+      "rmse_after_eva_action_processing": 0.028979260474443436
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 507.38254003226757,
+      "rmse_after_eva_action_processing": 0.04219042882323265
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 384.51883289963007,
+      "rmse_after_eva_action_processing": 0.04303918406367302
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 397.20691833645105,
+      "rmse_after_eva_action_processing": 0.026215234771370888
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 342.14210882782936,
+      "rmse_after_eva_action_processing": 0.06720232963562012
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 368.99335589259863,
+      "rmse_after_eva_action_processing": 0.09955791383981705
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 415.87741300463676,
+      "rmse_after_eva_action_processing": 0.018560951575636864
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 305.7479104027152,
+      "rmse_after_eva_action_processing": 0.04656142741441727
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 327.94549129903316,
+      "rmse_after_eva_action_processing": 0.025235574692487717
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 345.23794054985046,
+      "rmse_after_eva_action_processing": 0.02105674520134926
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 375.7846374064684,
+      "rmse_after_eva_action_processing": 0.013135485351085663
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 293.42311434447765,
+      "rmse_after_eva_action_processing": 0.11925522238016129
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 370.47961354255676,
+      "rmse_after_eva_action_processing": 0.03501829132437706
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 372.9201778769493,
+      "rmse_after_eva_action_processing": 0.03523911163210869
+    },
+    {
+      "episode_id": 27,
+      "frame_index": 208,
+      "valid_actions": 16,
+      "latency_ms": 368.29524859786034,
+      "rmse_after_eva_action_processing": 0.06038260832428932
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 489.08720817416906,
+      "rmse_after_eva_action_processing": 0.039686888456344604
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 360.6205238029361,
+      "rmse_after_eva_action_processing": 0.030235903337597847
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 363.30851074308157,
+      "rmse_after_eva_action_processing": 0.027789346873760223
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 381.0238540172577,
+      "rmse_after_eva_action_processing": 0.015045695938169956
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 430.63285667449236,
+      "rmse_after_eva_action_processing": 0.04679441079497337
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 310.9151218086481,
+      "rmse_after_eva_action_processing": 0.014627372846007347
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 357.13928658515215,
+      "rmse_after_eva_action_processing": 0.02197885699570179
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 496.2351666763425,
+      "rmse_after_eva_action_processing": 0.031947530806064606
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 367.2412093728781,
+      "rmse_after_eva_action_processing": 0.014573024585843086
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 347.1833737567067,
+      "rmse_after_eva_action_processing": 0.023928452283143997
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 329.4794475659728,
+      "rmse_after_eva_action_processing": 0.01434862706810236
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 282.6480455696583,
+      "rmse_after_eva_action_processing": 0.01293735858052969
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 258.21693893522024,
+      "rmse_after_eva_action_processing": 0.08257463574409485
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 208,
+      "valid_actions": 16,
+      "latency_ms": 291.4243144914508,
+      "rmse_after_eva_action_processing": 0.011765941046178341
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 224,
+      "valid_actions": 16,
+      "latency_ms": 296.17666732519865,
+      "rmse_after_eva_action_processing": 0.015183284878730774
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 240,
+      "valid_actions": 16,
+      "latency_ms": 424.8453490436077,
+      "rmse_after_eva_action_processing": 0.03238578140735626
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 256,
+      "valid_actions": 16,
+      "latency_ms": 388.95047549158335,
+      "rmse_after_eva_action_processing": 0.029131807386875153
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 272,
+      "valid_actions": 16,
+      "latency_ms": 373.80870524793863,
+      "rmse_after_eva_action_processing": 0.039527468383312225
+    },
+    {
+      "episode_id": 40,
+      "frame_index": 288,
+      "valid_actions": 2,
+      "latency_ms": 382.5009884312749,
+      "rmse_after_eva_action_processing": 0.01179535686969757
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 368.9727736636996,
+      "rmse_after_eva_action_processing": 0.07294130325317383
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 324.36994928866625,
+      "rmse_after_eva_action_processing": 0.10125084221363068
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 341.6595021262765,
+      "rmse_after_eva_action_processing": 0.026357943192124367
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 333.7676618248224,
+      "rmse_after_eva_action_processing": 0.037104059010744095
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 364.7997574880719,
+      "rmse_after_eva_action_processing": 0.014020166359841824
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 351.97088215500116,
+      "rmse_after_eva_action_processing": 0.09853827208280563
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 271.92653622478247,
+      "rmse_after_eva_action_processing": 0.10744954645633698
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 330.1661368459463,
+      "rmse_after_eva_action_processing": 0.018960019573569298
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 356.0580862686038,
+      "rmse_after_eva_action_processing": 0.016167251393198967
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 365.74111972004175,
+      "rmse_after_eva_action_processing": 0.03233973681926727
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 292.39632841199636,
+      "rmse_after_eva_action_processing": 0.017873603850603104
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 297.2232149913907,
+      "rmse_after_eva_action_processing": 0.014173448085784912
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 314.01725206524134,
+      "rmse_after_eva_action_processing": 0.09440259635448456
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 208,
+      "valid_actions": 16,
+      "latency_ms": 315.5562300235033,
+      "rmse_after_eva_action_processing": 0.02007780224084854
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 224,
+      "valid_actions": 16,
+      "latency_ms": 363.5715711861849,
+      "rmse_after_eva_action_processing": 0.03185730427503586
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 240,
+      "valid_actions": 16,
+      "latency_ms": 357.38707706332207,
+      "rmse_after_eva_action_processing": 0.04312526062130928
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 256,
+      "valid_actions": 16,
+      "latency_ms": 419.3533733487129,
+      "rmse_after_eva_action_processing": 0.06899052113294601
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 272,
+      "valid_actions": 16,
+      "latency_ms": 324.33047890663147,
+      "rmse_after_eva_action_processing": 0.04367147013545036
+    },
+    {
+      "episode_id": 54,
+      "frame_index": 288,
+      "valid_actions": 3,
+      "latency_ms": 377.1251095458865,
+      "rmse_after_eva_action_processing": 0.021250754594802856
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 386.253553442657,
+      "rmse_after_eva_action_processing": 0.02807307243347168
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 305.38864713162184,
+      "rmse_after_eva_action_processing": 0.039032984524965286
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 359.1865627095103,
+      "rmse_after_eva_action_processing": 0.014407474547624588
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 324.48025699704885,
+      "rmse_after_eva_action_processing": 0.025332044810056686
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 302.64796037226915,
+      "rmse_after_eva_action_processing": 0.019902430474758148
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 338.75778317451477,
+      "rmse_after_eva_action_processing": 0.029805051162838936
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 341.71712677925825,
+      "rmse_after_eva_action_processing": 0.014735032804310322
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 283.33285823464394,
+      "rmse_after_eva_action_processing": 0.0191955603659153
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 331.22387807816267,
+      "rmse_after_eva_action_processing": 0.026301130652427673
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 394.7415193542838,
+      "rmse_after_eva_action_processing": 0.11515915393829346
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 353.46678271889687,
+      "rmse_after_eva_action_processing": 0.043055612593889236
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 385.5885108932853,
+      "rmse_after_eva_action_processing": 0.06519406288862228
+    },
+    {
+      "episode_id": 67,
+      "frame_index": 192,
+      "valid_actions": 9,
+      "latency_ms": 407.2499293833971,
+      "rmse_after_eva_action_processing": 0.0412430502474308
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 466.1935269832611,
+      "rmse_after_eva_action_processing": 0.07282049208879471
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 369.043736718595,
+      "rmse_after_eva_action_processing": 0.04124320298433304
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 359.73809473216534,
+      "rmse_after_eva_action_processing": 0.018385058268904686
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 289.0539038926363,
+      "rmse_after_eva_action_processing": 0.022659461945295334
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 358.31358283758163,
+      "rmse_after_eva_action_processing": 0.09908200800418854
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 320.2022183686495,
+      "rmse_after_eva_action_processing": 0.04327816516160965
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 366.05527624487877,
+      "rmse_after_eva_action_processing": 0.035930413752794266
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 317.59175565093756,
+      "rmse_after_eva_action_processing": 0.044927533715963364
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 329.3864382430911,
+      "rmse_after_eva_action_processing": 0.03875751793384552
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 379.32502944022417,
+      "rmse_after_eva_action_processing": 0.01884584315121174
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 359.2599341645837,
+      "rmse_after_eva_action_processing": 0.10113058239221573
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 273.8996157422662,
+      "rmse_after_eva_action_processing": 0.03037918545305729
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 299.70686230808496,
+      "rmse_after_eva_action_processing": 0.048194535076618195
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 208,
+      "valid_actions": 16,
+      "latency_ms": 397.9658894240856,
+      "rmse_after_eva_action_processing": 0.04356962442398071
+    },
+    {
+      "episode_id": 81,
+      "frame_index": 224,
+      "valid_actions": 7,
+      "latency_ms": 371.9718614593148,
+      "rmse_after_eva_action_processing": 0.03236255794763565
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 392.73190032690763,
+      "rmse_after_eva_action_processing": 0.011833899654448032
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 294.0646233037114,
+      "rmse_after_eva_action_processing": 0.030536634847521782
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 291.037711314857,
+      "rmse_after_eva_action_processing": 0.024002859368920326
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 302.70132701843977,
+      "rmse_after_eva_action_processing": 0.01958395354449749
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 320.2804559841752,
+      "rmse_after_eva_action_processing": 0.04542437940835953
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 320.8359656855464,
+      "rmse_after_eva_action_processing": 0.09067375212907791
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 365.00036250799894,
+      "rmse_after_eva_action_processing": 0.02877889759838581
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 314.4995393231511,
+      "rmse_after_eva_action_processing": 0.04754503443837166
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 349.84995890408754,
+      "rmse_after_eva_action_processing": 0.025180108845233917
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 283.25948398560286,
+      "rmse_after_eva_action_processing": 0.01977347955107689
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 336.6037830710411,
+      "rmse_after_eva_action_processing": 0.022894738242030144
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 326.9600672647357,
+      "rmse_after_eva_action_processing": 0.07361529767513275
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 349.54475797712803,
+      "rmse_after_eva_action_processing": 0.0517306849360466
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 208,
+      "valid_actions": 16,
+      "latency_ms": 364.4220717251301,
+      "rmse_after_eva_action_processing": 0.04822010174393654
+    },
+    {
+      "episode_id": 94,
+      "frame_index": 224,
+      "valid_actions": 3,
+      "latency_ms": 364.80226553976536,
+      "rmse_after_eva_action_processing": 0.032764602452516556
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 0,
+      "valid_actions": 16,
+      "latency_ms": 430.27173914015293,
+      "rmse_after_eva_action_processing": 0.03823798894882202
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 16,
+      "valid_actions": 16,
+      "latency_ms": 293.30457653850317,
+      "rmse_after_eva_action_processing": 0.024353668093681335
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 32,
+      "valid_actions": 16,
+      "latency_ms": 357.3452467098832,
+      "rmse_after_eva_action_processing": 0.020323466509580612
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 48,
+      "valid_actions": 16,
+      "latency_ms": 303.09479776769876,
+      "rmse_after_eva_action_processing": 0.01591397635638714
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 64,
+      "valid_actions": 16,
+      "latency_ms": 337.90278900414705,
+      "rmse_after_eva_action_processing": 0.07821319252252579
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 80,
+      "valid_actions": 16,
+      "latency_ms": 294.159185141325,
+      "rmse_after_eva_action_processing": 0.07050177454948425
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 96,
+      "valid_actions": 16,
+      "latency_ms": 366.53004866093397,
+      "rmse_after_eva_action_processing": 0.016781188547611237
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 112,
+      "valid_actions": 16,
+      "latency_ms": 374.1864264011383,
+      "rmse_after_eva_action_processing": 0.04682694002985954
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 128,
+      "valid_actions": 16,
+      "latency_ms": 360.9919073060155,
+      "rmse_after_eva_action_processing": 0.023743486031889915
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 144,
+      "valid_actions": 16,
+      "latency_ms": 361.5684425458312,
+      "rmse_after_eva_action_processing": 0.023305656388401985
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 160,
+      "valid_actions": 16,
+      "latency_ms": 289.72066659480333,
+      "rmse_after_eva_action_processing": 0.11405859142541885
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 176,
+      "valid_actions": 16,
+      "latency_ms": 286.78498324006796,
+      "rmse_after_eva_action_processing": 0.061296187341213226
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 192,
+      "valid_actions": 16,
+      "latency_ms": 287.4347548931837,
+      "rmse_after_eva_action_processing": 0.049663983285427094
+    },
+    {
+      "episode_id": 108,
+      "frame_index": 208,
+      "valid_actions": 13,
+      "latency_ms": 369.6796055883169,
+      "rmse_after_eva_action_processing": 0.05459105223417282
+    }
+  ],
+  "overall_metrics": {
+    "actions_scored": 2320,
+    "mse": 0.002755235931965567,
+    "mae": 0.014363792072752131,
+    "rmse": 0.05249034132071887,
+    "max_abs_error": 0.7850000262260437,
+    "mean_action_vector_cosine": 0.9981122654983837,
+    "per_dimension_rmse": [
+      1.3125394720912803e-09,
+      2.0954757928848267e-09,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.08337635495601806,
+      0.017480917947930236,
+      0.03954287134472122,
+      0.0785586275637625,
+      0.04241706461629637,
+      0.049696117509512,
+      0.10389267777695814,
+      0.18992299728695375,
+      0.00013968349587054226,
+      0.0,
+      4.7942086021207934e-05,
+      0.0,
+      3.4864061642351424e-09,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "elapsed_seconds": 109.43828273471445,
+  "action_publishing": false,
+  "inference_path": "EVA DatasetTransport -> build_policy_observation -> StarVlaRollingStrategy -> PolicyClient -> fetch_action_chunk/action processing",
+  "trajectory_artifact": "work_dirs/eva_validation/deployment_20261013/g2_replay.npz"
+}

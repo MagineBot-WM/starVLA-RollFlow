@@ -1,0 +1,379 @@
+{
+  "python": "3.11.15",
+  "action_publishing": false,
+  "inference": false,
+  "scope": "schema/API/handshake compatibility; no model-quality claim",
+  "eva_api": {
+    "fetch_action_chunk": "(config: 'ConfigDict', runtime: 'RuntimeState', prompt: 'str', session: 'SessionState | None' = None, prebuilt_observation: 'dict | None' = None) -> 'np.ndarray'",
+    "build_policy_observation": "(frame: 'Observation', prompt: 'str', config: 'ConfigDict', runtime: 'RuntimeState') -> 'dict'"
+  },
+  "eva_sources": [
+    {
+      "path": "/data/tzq/starVLA-RollFlow/EVA-CLIENT/src/core/config.py",
+      "sha256": "8ed2627e2f65b6866ce02f489b05134c26ca87a5b09ff69b2ef1ae4e031e96f0"
+    },
+    {
+      "path": "/data/tzq/starVLA-RollFlow/EVA-CLIENT/src/policy_client/base.py",
+      "sha256": "7ad3347aebc5f87b55e53de03dba62d335d88fb9aa2b1eb54ce32f71b24c4cbc"
+    },
+    {
+      "path": "/data/tzq/starVLA-RollFlow/EVA-CLIENT/src/transport/zmq.py",
+      "sha256": "a785b36d80cbe0ea8786de52892e4bdd2f7b670d54c82ff2054c7e59b6bbe54c"
+    },
+    {
+      "path": "/data/tzq/starVLA-RollFlow/EVA-CLIENT/src/robots/base.py",
+      "sha256": "301a99bb72a46db15e44d451f1684db3d3a9f56532a932c37116c957270752cc"
+    },
+    {
+      "path": "/data/tzq/starVLA-RollFlow/EVA-CLIENT/src/strategy/base_strategy.py",
+      "sha256": "a8923979ac02a3c9edb38867058fb75cb1d3470c586b0691144d08a17eb19f12"
+    }
+  ],
+  "resolved_config": {
+    "robot_type": "eva_libero_virtual",
+    "transport": "libero_sim",
+    "image_hw": [
+      224,
+      224
+    ],
+    "source_color": "rgb",
+    "execute_steps": 8,
+    "control_hz": 20,
+    "strategy": "StarVlaRollingStrategy"
+  },
+  "contract": {
+    "name": "libero_rollflow_h32_c8_k4",
+    "protocol": "starvla_eva_contract_v2",
+    "robot": "libero_franka",
+    "cameras": [
+      {
+        "eva_key": "agentview",
+        "training_key": "video.primary_image"
+      },
+      {
+        "eva_key": "wrist",
+        "training_key": "video.wrist_image"
+      }
+    ],
+    "image": {
+      "hw": [
+        224,
+        224
+      ],
+      "color": "rgb",
+      "resize": "direct",
+      "interpolation": "bilinear",
+      "rotate_180": true
+    },
+    "state": {
+      "include": false,
+      "raw_dim": 0,
+      "fields": []
+    },
+    "action": {
+      "mode": "joint",
+      "semantics": "libero_cartesian_delta",
+      "dim": 7,
+      "chunk_size": 8,
+      "unnorm_key": "franka",
+      "training_keys": [
+        "action.x",
+        "action.y",
+        "action.z",
+        "action.roll",
+        "action.pitch",
+        "action.yaw",
+        "action.gripper"
+      ],
+      "fields": [
+        {
+          "training_key": "action.x",
+          "slice": [
+            0,
+            1
+          ],
+          "units": "controller_delta"
+        },
+        {
+          "training_key": "action.y",
+          "slice": [
+            1,
+            2
+          ],
+          "units": "controller_delta"
+        },
+        {
+          "training_key": "action.z",
+          "slice": [
+            2,
+            3
+          ],
+          "units": "controller_delta"
+        },
+        {
+          "training_key": "action.roll",
+          "slice": [
+            3,
+            4
+          ],
+          "units": "controller_delta"
+        },
+        {
+          "training_key": "action.pitch",
+          "slice": [
+            4,
+            5
+          ],
+          "units": "controller_delta"
+        },
+        {
+          "training_key": "action.yaw",
+          "slice": [
+            5,
+            6
+          ],
+          "units": "controller_delta"
+        },
+        {
+          "training_key": "action.gripper",
+          "slice": [
+            6,
+            7
+          ],
+          "units": "normalized"
+        }
+      ]
+    },
+    "model": {
+      "framework": "QwenGR00TRollFlow",
+      "horizon": 32,
+      "inference_steps": 4
+    },
+    "inference_kwargs": {},
+    "execution": {
+      "kind": "rolling",
+      "execute_steps": 8,
+      "control_hz": 20
+    },
+    "eva": {
+      "robot_type": "eva_libero_virtual",
+      "source_color": "rgb",
+      "obs_space": "JointState",
+      "action_space": "JointState",
+      "gripper": {
+        "threshold": 0.5,
+        "open": -1.0,
+        "close": 1.0
+      }
+    }
+  },
+  "contract_sha256": "2389d992e2490f697d70638b497361eb2ad7bb918b79c19b26f93621e8b0c675",
+  "dependencies": {
+    "numpy": "1.26.4",
+    "Pillow": "12.2.0",
+    "websockets": "13.1",
+    "msgpack": "1.1.2",
+    "pyzmq": "27.2.0"
+  },
+  "server": {
+    "env": "starvla_eva_contract_server",
+    "ckpt_path": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt",
+    "action_chunk_size": 8,
+    "available_unnorm_keys": [
+      "franka"
+    ],
+    "default_unnorm_key": "franka",
+    "training_data_mix": "libero_all_rollflow",
+    "training_obs_image_size": [
+      224,
+      224
+    ],
+    "eval_image_contract": "Eval clients must explicitly choose image count and order. The server does not infer or reorder camera views from training config.",
+    "action_keys": [
+      "action.x",
+      "action.y",
+      "action.z",
+      "action.roll",
+      "action.pitch",
+      "action.yaw",
+      "action.gripper"
+    ],
+    "state_keys": [
+      "state.x",
+      "state.y",
+      "state.z",
+      "state.roll",
+      "state.pitch",
+      "state.yaw",
+      "state.pad",
+      "state.gripper"
+    ],
+    "contract_name": "libero_rollflow_h32_c8_k4",
+    "contract": {
+      "name": "libero_rollflow_h32_c8_k4",
+      "protocol": "starvla_eva_contract_v2",
+      "robot": "libero_franka",
+      "cameras": [
+        {
+          "eva_key": "agentview",
+          "training_key": "video.primary_image"
+        },
+        {
+          "eva_key": "wrist",
+          "training_key": "video.wrist_image"
+        }
+      ],
+      "image": {
+        "hw": [
+          224,
+          224
+        ],
+        "color": "rgb",
+        "resize": "direct",
+        "interpolation": "bilinear",
+        "rotate_180": true
+      },
+      "state": {
+        "include": false,
+        "raw_dim": 0,
+        "fields": []
+      },
+      "action": {
+        "mode": "joint",
+        "semantics": "libero_cartesian_delta",
+        "dim": 7,
+        "chunk_size": 8,
+        "unnorm_key": "franka",
+        "training_keys": [
+          "action.x",
+          "action.y",
+          "action.z",
+          "action.roll",
+          "action.pitch",
+          "action.yaw",
+          "action.gripper"
+        ],
+        "fields": [
+          {
+            "training_key": "action.x",
+            "slice": [
+              0,
+              1
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.y",
+            "slice": [
+              1,
+              2
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.z",
+            "slice": [
+              2,
+              3
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.roll",
+            "slice": [
+              3,
+              4
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.pitch",
+            "slice": [
+              4,
+              5
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.yaw",
+            "slice": [
+              5,
+              6
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.gripper",
+            "slice": [
+              6,
+              7
+            ],
+            "units": "normalized"
+          }
+        ]
+      },
+      "model": {
+        "framework": "QwenGR00TRollFlow",
+        "horizon": 32,
+        "inference_steps": 4
+      },
+      "inference_kwargs": {},
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 8,
+        "control_hz": 20
+      },
+      "eva": {
+        "robot_type": "eva_libero_virtual",
+        "source_color": "rgb",
+        "obs_space": "JointState",
+        "action_space": "JointState",
+        "gripper": {
+          "threshold": 0.5,
+          "open": -1.0,
+          "close": 1.0
+        }
+      }
+    },
+    "contract_sha256": "2389d992e2490f697d70638b497361eb2ad7bb918b79c19b26f93621e8b0c675",
+    "stream_policy": "single_connection_with_reset_on_connect_and_disconnect",
+    "capabilities": {
+      "reset": true,
+      "chunk_sequence": true,
+      "trace": true,
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 8,
+        "control_hz": 20
+      }
+    },
+    "runtime_identity": {
+      "checkpoint_file": {
+        "path": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt",
+        "size_bytes": 2499974667,
+        "mtime_ns": 1788845336429569651
+      },
+      "resolved_training_config_sha256": "20d17b8fa289f7b2cceef73ed0d335cdbb589d90af9ba3c63c9d917a3ddea153",
+      "sources": [
+        {
+          "path": "/data/tzq/starVLA-RollFlow/deployment/model_server/policy_wrapper.py",
+          "sha256": "1acc1d9dd0c4b34a565da530ea8c03ff5800ce4dba1405e08b5dd0d69e263c80"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/examples/simBenchmarks/LIBERO/train_files/data_registry/data_config.py",
+          "sha256": "6fb819757a5d2e039337541d38d00da9f7aa3046785ead142808987d5af4b841"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/framework/VLM4A/QwenGR00TRollFlow.py",
+          "sha256": "d00994a6d92649523c56b4e24d4c2a406632826726802b415c7c56e2b25298ad"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/modules/action_model/GR00T_RollFlow_ActionHeader.py",
+          "sha256": "e09b53e0c4ac858450761ea3cabc63c1d540ca7b1f42caa852375987e05c3e24"
+        }
+      ]
+    },
+    "session_id": "a9ae0bbf9bc1441f90a6305a738f2673",
+    "protocol": "starvla_eva_contract_v2"
+  }
+}

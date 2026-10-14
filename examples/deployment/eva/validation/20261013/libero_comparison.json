@@ -1,0 +1,43 @@
+{
+  "baseline": "examples/realRobots/EvaClient/validation/20261013/libero_eva_verified_55k_20261013.json",
+  "current": "work_dirs/eva_validation/deployment_20261013/libero.json",
+  "array_max_abs_errors": {
+    "task_0_episode_0_actions": 0.0,
+    "task_0_episode_1_actions": 0.0,
+    "task_1_episode_0_actions": 0.0,
+    "task_1_episode_1_actions": 0.0
+  },
+  "all_arrays_identical": true,
+  "episodes": [
+    {
+      "task_id": 0,
+      "episode_index": 0,
+      "success": true,
+      "steps": 121,
+      "chunks": 16
+    },
+    {
+      "task_id": 0,
+      "episode_index": 1,
+      "success": true,
+      "steps": 115,
+      "chunks": 15
+    },
+    {
+      "task_id": 1,
+      "episode_index": 0,
+      "success": true,
+      "steps": 89,
+      "chunks": 12
+    },
+    {
+      "task_id": 1,
+      "episode_index": 1,
+      "success": false,
+      "steps": 300,
+      "chunks": 38
+    }
+  ],
+  "successes": 3,
+  "trials": 4
+}

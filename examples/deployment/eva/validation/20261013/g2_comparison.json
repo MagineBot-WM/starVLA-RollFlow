@@ -1,0 +1,31 @@
+{
+  "baseline": "examples/realRobots/EvaClient/validation/20261013/agibot_g2_eva_pipeline_final_20261013.json",
+  "current": "work_dirs/eva_validation/deployment_20261013/g2_replay.json",
+  "array_max_abs_errors": {
+    "episode_0_prediction": 0.0,
+    "episode_0_target": 0.0,
+    "episode_13_prediction": 0.0,
+    "episode_13_target": 0.0,
+    "episode_27_prediction": 0.0,
+    "episode_27_target": 0.0,
+    "episode_40_prediction": 0.0,
+    "episode_40_target": 0.0,
+    "episode_54_prediction": 0.0,
+    "episode_54_target": 0.0,
+    "episode_67_prediction": 0.0,
+    "episode_67_target": 0.0,
+    "episode_81_prediction": 0.0,
+    "episode_81_target": 0.0,
+    "episode_94_prediction": 0.0,
+    "episode_94_target": 0.0,
+    "episode_108_prediction": 0.0,
+    "episode_108_target": 0.0
+  },
+  "all_arrays_identical": true,
+  "actions_scored": 2320,
+  "chunks": 149,
+  "mse": 0.002755235931965567,
+  "baseline_mse": 0.002755235931965567,
+  "rmse": 0.05249034132071887,
+  "action_publishing": false
+}

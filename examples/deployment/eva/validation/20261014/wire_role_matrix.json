@@ -1,0 +1,66 @@
+{
+  "libzmq": "4.3.5",
+  "pyzmq": "27.2.0",
+  "physical_robot_actions": false,
+  "endpoints": "temporary private IPC",
+  "cases": [
+    {
+      "type": "PUB",
+      "publisher_role": "connect",
+      "received": true,
+      "subscription_seen": false,
+      "sends": 2
+    },
+    {
+      "type": "PUB",
+      "publisher_role": "bind",
+      "received": true,
+      "subscription_seen": false,
+      "sends": 2
+    },
+    {
+      "type": "XPUB",
+      "publisher_role": "connect",
+      "received": true,
+      "subscription_seen": true,
+      "sends": 2
+    },
+    {
+      "type": "XPUB",
+      "publisher_role": "bind",
+      "received": true,
+      "subscription_seen": true,
+      "sends": 2
+    }
+  ],
+  "tcp_cases": [
+    {
+      "type": "PUB",
+      "publisher_role": "connect",
+      "received": true,
+      "subscription_seen": false,
+      "sends": 2
+    },
+    {
+      "type": "PUB",
+      "publisher_role": "bind",
+      "received": true,
+      "subscription_seen": false,
+      "sends": 2
+    },
+    {
+      "type": "XPUB",
+      "publisher_role": "connect",
+      "received": true,
+      "subscription_seen": true,
+      "sends": 2
+    },
+    {
+      "type": "XPUB",
+      "publisher_role": "bind",
+      "received": true,
+      "subscription_seen": true,
+      "sends": 2
+    }
+  ]
+}

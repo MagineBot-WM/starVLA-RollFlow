@@ -1,0 +1,125 @@
+{
+  "name": "libero_rollflow_h64_c8",
+  "protocol": "starvla_eva_contract_v2",
+  "robot": "libero_franka",
+  "cameras": [
+    {
+      "eva_key": "agentview",
+      "training_key": "video.primary_image"
+    },
+    {
+      "eva_key": "wrist",
+      "training_key": "video.wrist_image"
+    }
+  ],
+  "image": {
+    "hw": [
+      224,
+      224
+    ],
+    "color": "rgb",
+    "resize": "direct",
+    "rotate_180": true
+  },
+  "state": {
+    "include": false,
+    "raw_dim": 0,
+    "fields": []
+  },
+  "action": {
+    "mode": "joint",
+    "semantics": "libero_cartesian_delta",
+    "dim": 7,
+    "chunk_size": 8,
+    "unnorm_key": "franka",
+    "training_keys": [
+      "action.x",
+      "action.y",
+      "action.z",
+      "action.roll",
+      "action.pitch",
+      "action.yaw",
+      "action.gripper"
+    ],
+    "fields": [
+      {
+        "training_key": "action.x",
+        "slice": [
+          0,
+          1
+        ],
+        "units": "controller_delta"
+      },
+      {
+        "training_key": "action.y",
+        "slice": [
+          1,
+          2
+        ],
+        "units": "controller_delta"
+      },
+      {
+        "training_key": "action.z",
+        "slice": [
+          2,
+          3
+        ],
+        "units": "controller_delta"
+      },
+      {
+        "training_key": "action.roll",
+        "slice": [
+          3,
+          4
+        ],
+        "units": "controller_delta"
+      },
+      {
+        "training_key": "action.pitch",
+        "slice": [
+          4,
+          5
+        ],
+        "units": "controller_delta"
+      },
+      {
+        "training_key": "action.yaw",
+        "slice": [
+          5,
+          6
+        ],
+        "units": "controller_delta"
+      },
+      {
+        "training_key": "action.gripper",
+        "slice": [
+          6,
+          7
+        ],
+        "units": "normalized"
+      }
+    ]
+  },
+  "model": {
+    "framework": "QwenGR00TRollFlow",
+    "horizon": 64,
+    "inference_steps": 8
+  },
+  "inference_kwargs": {},
+  "execution": {
+    "kind": "rolling",
+    "execute_steps": 8,
+    "control_hz": 20
+  },
+  "eva": {
+    "robot_type": "eva_libero_virtual",
+    "source_color": "rgb",
+    "obs_space": "JointState",
+    "action_space": "JointState",
+    "gripper": {
+      "threshold": 0.5,
+      "open": -1.0,
+      "close": 1.0
+    }
+  }
+}

@@ -1,0 +1,285 @@
+{
+  "name": "agibot_g2_rollflow_h64_c16_async4",
+  "protocol": "starvla_eva_contract_v2",
+  "robot": "agibot_g2",
+  "cameras": [
+    {
+      "eva_key": "top_head",
+      "training_key": "video.top_head"
+    },
+    {
+      "eva_key": "hand_left",
+      "training_key": "video.hand_left"
+    },
+    {
+      "eva_key": "hand_right",
+      "training_key": "video.hand_right"
+    }
+  ],
+  "image": {
+    "hw": [
+      224,
+      224
+    ],
+    "color": "rgb",
+    "resize": "direct",
+    "interpolation": "bicubic",
+    "rotate_180": false
+  },
+  "state": {
+    "include": true,
+    "raw_dim": 24,
+    "fields": [
+      {
+        "training_key": "state.left_arm",
+        "slice": [
+          0,
+          7
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "state.left_gripper",
+        "slice": [
+          7,
+          8
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "state.right_arm",
+        "slice": [
+          8,
+          15
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "state.right_gripper",
+        "slice": [
+          15,
+          16
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "state.head",
+        "slice": [
+          16,
+          19
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "state.waist",
+        "slice": [
+          19,
+          24
+        ],
+        "units": "rad"
+      }
+    ]
+  },
+  "action": {
+    "mode": "joint",
+    "dim": 24,
+    "chunk_size": 16,
+    "unnorm_key": "agibot_g2",
+    "training_keys": [
+      "action.left_arm",
+      "action.left_gripper",
+      "action.right_arm",
+      "action.right_gripper",
+      "action.head",
+      "action.waist"
+    ],
+    "semantics": "absolute_joint_position",
+    "fields": [
+      {
+        "training_key": "action.left_arm",
+        "slice": [
+          0,
+          7
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "action.left_gripper",
+        "slice": [
+          7,
+          8
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "action.right_arm",
+        "slice": [
+          8,
+          15
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "action.right_gripper",
+        "slice": [
+          15,
+          16
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "action.head",
+        "slice": [
+          16,
+          19
+        ],
+        "units": "rad"
+      },
+      {
+        "training_key": "action.waist",
+        "slice": [
+          19,
+          24
+        ],
+        "units": "rad"
+      }
+    ]
+  },
+  "model": {
+    "framework": "QwenGR00TRollingFlow",
+    "horizon": 64,
+    "inference_steps": 4
+  },
+  "inference_kwargs": {},
+  "execution": {
+    "kind": "rolling",
+    "execute_steps": 16,
+    "control_hz": 30,
+    "timing": "fixed_rate",
+    "scheduling": "async_prefetch",
+    "prefetch_after_steps": 4,
+    "aggregation": "none"
+  },
+  "eva": {
+    "robot_type": "agibot_g2",
+    "source_color": "bgr",
+    "obs_space": "JointState",
+    "action_space": "JointState",
+    "gripper": {
+      "threshold": -0.4,
+      "open": 0.0,
+      "close": -0.785
+    },
+    "joint_names": [
+      "idx21_arm_l_joint1",
+      "idx22_arm_l_joint2",
+      "idx23_arm_l_joint3",
+      "idx24_arm_l_joint4",
+      "idx25_arm_l_joint5",
+      "idx26_arm_l_joint6",
+      "idx27_arm_l_joint7",
+      "idx41_gripper_l_outer_joint1",
+      "idx61_arm_r_joint1",
+      "idx62_arm_r_joint2",
+      "idx63_arm_r_joint3",
+      "idx64_arm_r_joint4",
+      "idx65_arm_r_joint5",
+      "idx66_arm_r_joint6",
+      "idx67_arm_r_joint7",
+      "idx81_gripper_r_outer_joint1",
+      "idx11_head_joint1",
+      "idx12_head_joint2",
+      "idx13_head_joint3",
+      "idx01_body_joint1",
+      "idx02_body_joint2",
+      "idx03_body_joint3",
+      "idx04_body_joint4",
+      "idx05_body_joint5"
+    ],
+    "state_groups": [
+      {
+        "name": "left_arm",
+        "slice": [
+          0,
+          8
+        ]
+      },
+      {
+        "name": "right_arm",
+        "slice": [
+          8,
+          16
+        ]
+      },
+      {
+        "name": "head",
+        "slice": [
+          16,
+          19
+        ]
+      },
+      {
+        "name": "body",
+        "slice": [
+          19,
+          24
+        ]
+      }
+    ],
+    "hardware_node": "examples/hardware/agibot_g2/node.py",
+    "hardware_joint_names": [
+      "idx21_arm_l_joint1",
+      "idx22_arm_l_joint2",
+      "idx23_arm_l_joint3",
+      "idx24_arm_l_joint4",
+      "idx25_arm_l_joint5",
+      "idx26_arm_l_joint6",
+      "idx27_arm_l_joint7",
+      "idx31_gripper_l_inner_joint1",
+      "idx61_arm_r_joint1",
+      "idx62_arm_r_joint2",
+      "idx63_arm_r_joint3",
+      "idx64_arm_r_joint4",
+      "idx65_arm_r_joint5",
+      "idx66_arm_r_joint6",
+      "idx67_arm_r_joint7",
+      "idx71_gripper_r_inner_joint1",
+      "idx11_head_joint1",
+      "idx12_head_joint2",
+      "idx13_head_joint3",
+      "idx01_body_joint1",
+      "idx02_body_joint2",
+      "idx03_body_joint3",
+      "idx04_body_joint4",
+      "idx05_body_joint5"
+    ],
+    "action_socket_role": "bind",
+    "initial_qpos": [
+      0.038728971034288406,
+      -0.003492203075438738,
+      -0.1708402782678604,
+      -2.2650630474090576,
+      -0.3486744463443756,
+      0.2596842646598816,
+      -0.3717958331108093,
+      -0.7850000262260437,
+      -1.9285929203033447,
+      -1.3674280643463135,
+      1.7145602703094482,
+      -2.0340898036956787,
+      -1.2291909456253052,
+      -0.13853931427001953,
+      -0.07228998839855194,
+      -0.7835782766342163,
+      0.002070546615868807,
+      0.0,
+      0.31518319249153137,
+      -0.05135408416390419,
+      0.053572412580251694,
+      0.41591405868530273,
+      0.0,
+      0.0
+    ],
+    "initial_qpos_source": "median first state of the 100 training episodes, excluding 9 validation episodes; rad"
+  }
+}

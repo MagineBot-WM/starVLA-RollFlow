@@ -1,0 +1,1174 @@
+{
+  "config": "/data/tzq/starVLA-RollFlow/examples/deployment/eva/configs/libero_sim_async.py",
+  "async_reports": [
+    {
+      "task_id": 0,
+      "episode_index": 0,
+      "requests": [
+        {
+          "observation_step": 0,
+          "action_start": 0,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248456.139144622,
+          "completed_at": 5248457.563408971,
+          "latency_ms": 1424.2643490433693
+        },
+        {
+          "observation_step": 4,
+          "action_start": 8,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248459.228514126,
+          "completed_at": 5248459.576299634,
+          "latency_ms": 347.7855082601309
+        },
+        {
+          "observation_step": 12,
+          "action_start": 16,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248462.257947142,
+          "completed_at": 5248462.551198882,
+          "latency_ms": 293.2517398148775
+        },
+        {
+          "observation_step": 20,
+          "action_start": 24,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248465.409745348,
+          "completed_at": 5248465.672240741,
+          "latency_ms": 262.4953929334879
+        },
+        {
+          "observation_step": 28,
+          "action_start": 32,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248468.488870937,
+          "completed_at": 5248468.825141427,
+          "latency_ms": 336.2704897299409
+        },
+        {
+          "observation_step": 36,
+          "action_start": 40,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248471.720253259,
+          "completed_at": 5248472.060365041,
+          "latency_ms": 340.1117818430066
+        },
+        {
+          "observation_step": 44,
+          "action_start": 48,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248474.868402108,
+          "completed_at": 5248475.188445866,
+          "latency_ms": 320.04375848919153
+        },
+        {
+          "observation_step": 52,
+          "action_start": 56,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248477.981942551,
+          "completed_at": 5248478.306770502,
+          "latency_ms": 324.8279504477978
+        },
+        {
+          "observation_step": 60,
+          "action_start": 64,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248480.860723377,
+          "completed_at": 5248481.196615604,
+          "latency_ms": 335.8922265470028
+        },
+        {
+          "observation_step": 68,
+          "action_start": 72,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248483.783564785,
+          "completed_at": 5248484.051277402,
+          "latency_ms": 267.7126172930002
+        },
+        {
+          "observation_step": 76,
+          "action_start": 80,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248486.554478971,
+          "completed_at": 5248486.878885989,
+          "latency_ms": 324.4070177897811
+        },
+        {
+          "observation_step": 84,
+          "action_start": 88,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248489.119147081,
+          "completed_at": 5248489.438380578,
+          "latency_ms": 319.23349667340517
+        },
+        {
+          "observation_step": 92,
+          "action_start": 96,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248491.701745085,
+          "completed_at": 5248492.005470026,
+          "latency_ms": 303.7249408662319
+        },
+        {
+          "observation_step": 100,
+          "action_start": 104,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248494.25819571,
+          "completed_at": 5248494.575576618,
+          "latency_ms": 317.3809079453349
+        },
+        {
+          "observation_step": 108,
+          "action_start": 112,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248496.837308831,
+          "completed_at": 5248497.098599871,
+          "latency_ms": 261.29104010760784
+        },
+        {
+          "observation_step": 116,
+          "action_start": 120,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248499.380351567,
+          "completed_at": 5248499.706446997,
+          "latency_ms": 326.0954301804304
+        },
+        {
+          "observation_step": 124,
+          "action_start": 128,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248501.925847087,
+          "completed_at": 5248502.240428693,
+          "latency_ms": 314.5816056057811
+        },
+        {
+          "observation_step": 132,
+          "action_start": 136,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248504.415230187,
+          "completed_at": 5248504.800323622,
+          "latency_ms": 385.09343564510345
+        },
+        {
+          "observation_step": 140,
+          "action_start": 144,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248507.221638495,
+          "completed_at": 5248507.525402716,
+          "latency_ms": 303.7642212584615
+        }
+      ],
+      "gaps": [
+        {
+          "action_start": 0,
+          "seconds": 1.422885723412037
+        }
+      ]
+    },
+    {
+      "task_id": 0,
+      "episode_index": 1,
+      "requests": [
+        {
+          "observation_step": 0,
+          "action_start": 0,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248521.414933632,
+          "completed_at": 5248521.779766738,
+          "latency_ms": 364.83310628682375
+        },
+        {
+          "observation_step": 4,
+          "action_start": 8,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248523.569588114,
+          "completed_at": 5248523.842928811,
+          "latency_ms": 273.3406974002719
+        },
+        {
+          "observation_step": 12,
+          "action_start": 16,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248526.592785944,
+          "completed_at": 5248526.928025977,
+          "latency_ms": 335.24003252387047
+        },
+        {
+          "observation_step": 20,
+          "action_start": 24,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248529.700202071,
+          "completed_at": 5248530.082264518,
+          "latency_ms": 382.06244725733995
+        },
+        {
+          "observation_step": 28,
+          "action_start": 32,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248532.861494597,
+          "completed_at": 5248533.199464868,
+          "latency_ms": 337.97027077525854
+        },
+        {
+          "observation_step": 36,
+          "action_start": 40,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248535.988251029,
+          "completed_at": 5248536.319124052,
+          "latency_ms": 330.8730237185955
+        },
+        {
+          "observation_step": 44,
+          "action_start": 48,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248539.140944524,
+          "completed_at": 5248539.419921102,
+          "latency_ms": 278.97657826542854
+        },
+        {
+          "observation_step": 52,
+          "action_start": 56,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248542.140151025,
+          "completed_at": 5248542.472761864,
+          "latency_ms": 332.6108390465379
+        },
+        {
+          "observation_step": 60,
+          "action_start": 64,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248544.966412894,
+          "completed_at": 5248545.285852701,
+          "latency_ms": 319.4398069754243
+        },
+        {
+          "observation_step": 68,
+          "action_start": 72,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248547.743035255,
+          "completed_at": 5248548.000899893,
+          "latency_ms": 257.8646382316947
+        },
+        {
+          "observation_step": 76,
+          "action_start": 80,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248550.21837672,
+          "completed_at": 5248550.475986218,
+          "latency_ms": 257.6094977557659
+        },
+        {
+          "observation_step": 84,
+          "action_start": 88,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248552.721866557,
+          "completed_at": 5248553.058830509,
+          "latency_ms": 336.963951587677
+        },
+        {
+          "observation_step": 92,
+          "action_start": 96,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248555.299276197,
+          "completed_at": 5248555.546533649,
+          "latency_ms": 247.25745152682066
+        },
+        {
+          "observation_step": 100,
+          "action_start": 104,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248557.901299786,
+          "completed_at": 5248558.170398126,
+          "latency_ms": 269.09834053367376
+        },
+        {
+          "observation_step": 108,
+          "action_start": 112,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248560.488874941,
+          "completed_at": 5248560.807014918,
+          "latency_ms": 318.1399768218398
+        },
+        {
+          "observation_step": 116,
+          "action_start": 120,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248562.942176111,
+          "completed_at": 5248563.272770399,
+          "latency_ms": 330.59428818523884
+        },
+        {
+          "observation_step": 124,
+          "action_start": 128,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248565.502771522,
+          "completed_at": 5248565.828531775,
+          "latency_ms": 325.76025277376175
+        }
+      ],
+      "gaps": [
+        {
+          "action_start": 0,
+          "seconds": 0.3652098849415779
+        }
+      ]
+    },
+    {
+      "task_id": 1,
+      "episode_index": 0,
+      "requests": [
+        {
+          "observation_step": 0,
+          "action_start": 0,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248580.27941202,
+          "completed_at": 5248580.618578523,
+          "latency_ms": 339.1665033996105
+        },
+        {
+          "observation_step": 4,
+          "action_start": 8,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248582.245445793,
+          "completed_at": 5248582.512973925,
+          "latency_ms": 267.5281325355172
+        },
+        {
+          "observation_step": 12,
+          "action_start": 16,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248585.236604051,
+          "completed_at": 5248585.569378532,
+          "latency_ms": 332.774480804801
+        },
+        {
+          "observation_step": 20,
+          "action_start": 24,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248588.33067917,
+          "completed_at": 5248588.643164436,
+          "latency_ms": 312.4852664768696
+        },
+        {
+          "observation_step": 28,
+          "action_start": 32,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248591.306888205,
+          "completed_at": 5248591.598381257,
+          "latency_ms": 291.49305168539286
+        },
+        {
+          "observation_step": 36,
+          "action_start": 40,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248594.358666965,
+          "completed_at": 5248594.692646881,
+          "latency_ms": 333.97991582751274
+        },
+        {
+          "observation_step": 44,
+          "action_start": 48,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248597.489030492,
+          "completed_at": 5248597.769650418,
+          "latency_ms": 280.61992675065994
+        },
+        {
+          "observation_step": 52,
+          "action_start": 56,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248600.623534577,
+          "completed_at": 5248600.933499349,
+          "latency_ms": 309.96477231383324
+        },
+        {
+          "observation_step": 60,
+          "action_start": 64,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248603.843919618,
+          "completed_at": 5248604.168891574,
+          "latency_ms": 324.9719562008977
+        },
+        {
+          "observation_step": 68,
+          "action_start": 72,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248607.074767963,
+          "completed_at": 5248607.329761708,
+          "latency_ms": 254.99374512583017
+        },
+        {
+          "observation_step": 76,
+          "action_start": 80,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248610.285822356,
+          "completed_at": 5248610.542030414,
+          "latency_ms": 256.20805751532316
+        },
+        {
+          "observation_step": 84,
+          "action_start": 88,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248613.388832855,
+          "completed_at": 5248613.709564574,
+          "latency_ms": 320.7317190244794
+        },
+        {
+          "observation_step": 92,
+          "action_start": 96,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248616.534816588,
+          "completed_at": 5248616.814636375,
+          "latency_ms": 279.8197865486145
+        },
+        {
+          "observation_step": 100,
+          "action_start": 104,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248619.703426085,
+          "completed_at": 5248619.987665338,
+          "latency_ms": 284.23925302922726
+        },
+        {
+          "observation_step": 108,
+          "action_start": 112,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248622.80911532,
+          "completed_at": 5248623.081606163,
+          "latency_ms": 272.4908422678709
+        },
+        {
+          "observation_step": 116,
+          "action_start": 120,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248626.03793617,
+          "completed_at": 5248626.352920911,
+          "latency_ms": 314.98474162071943
+        },
+        {
+          "observation_step": 124,
+          "action_start": 128,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248629.36091167,
+          "completed_at": 5248629.646482463,
+          "latency_ms": 285.57079285383224
+        },
+        {
+          "observation_step": 132,
+          "action_start": 136,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248632.491689029,
+          "completed_at": 5248632.770447836,
+          "latency_ms": 278.7588071078062
+        },
+        {
+          "observation_step": 140,
+          "action_start": 144,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248635.65581213,
+          "completed_at": 5248635.998377524,
+          "latency_ms": 342.5653940066695
+        },
+        {
+          "observation_step": 148,
+          "action_start": 152,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248638.756828717,
+          "completed_at": 5248639.058725596,
+          "latency_ms": 301.89687944948673
+        }
+      ],
+      "gaps": [
+        {
+          "action_start": 0,
+          "seconds": 0.33984006848186255
+        }
+      ]
+    },
+    {
+      "task_id": 1,
+      "episode_index": 1,
+      "requests": [
+        {
+          "observation_step": 0,
+          "action_start": 0,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248654.602522828,
+          "completed_at": 5248654.955681949,
+          "latency_ms": 353.1591212376952
+        },
+        {
+          "observation_step": 4,
+          "action_start": 8,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248656.589829022,
+          "completed_at": 5248656.928831554,
+          "latency_ms": 339.002531953156
+        },
+        {
+          "observation_step": 12,
+          "action_start": 16,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248659.556653605,
+          "completed_at": 5248659.823773228,
+          "latency_ms": 267.11962278932333
+        },
+        {
+          "observation_step": 20,
+          "action_start": 24,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248662.46563567,
+          "completed_at": 5248662.77747585,
+          "latency_ms": 311.84017937630415
+        },
+        {
+          "observation_step": 28,
+          "action_start": 32,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248665.45301041,
+          "completed_at": 5248665.768705048,
+          "latency_ms": 315.6946375966072
+        },
+        {
+          "observation_step": 36,
+          "action_start": 40,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248668.559132233,
+          "completed_at": 5248668.880616456,
+          "latency_ms": 321.4842230081558
+        },
+        {
+          "observation_step": 44,
+          "action_start": 48,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248671.711270563,
+          "completed_at": 5248671.983579851,
+          "latency_ms": 272.30928745120764
+        },
+        {
+          "observation_step": 52,
+          "action_start": 56,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248674.875844523,
+          "completed_at": 5248675.161844378,
+          "latency_ms": 285.99985502660275
+        },
+        {
+          "observation_step": 60,
+          "action_start": 64,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248677.924706363,
+          "completed_at": 5248678.267844801,
+          "latency_ms": 343.138437718153
+        },
+        {
+          "observation_step": 68,
+          "action_start": 72,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248680.919325133,
+          "completed_at": 5248681.211356215,
+          "latency_ms": 292.03108232468367
+        },
+        {
+          "observation_step": 76,
+          "action_start": 80,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248683.909051978,
+          "completed_at": 5248684.213692836,
+          "latency_ms": 304.6408584341407
+        },
+        {
+          "observation_step": 84,
+          "action_start": 88,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248686.90620874,
+          "completed_at": 5248687.216743687,
+          "latency_ms": 310.5349475517869
+        },
+        {
+          "observation_step": 92,
+          "action_start": 96,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248689.874944725,
+          "completed_at": 5248690.155810409,
+          "latency_ms": 280.8656841516495
+        },
+        {
+          "observation_step": 100,
+          "action_start": 104,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248692.910777257,
+          "completed_at": 5248693.161250159,
+          "latency_ms": 250.47290232032537
+        },
+        {
+          "observation_step": 108,
+          "action_start": 112,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248695.931082444,
+          "completed_at": 5248696.287256046,
+          "latency_ms": 356.17360193282366
+        },
+        {
+          "observation_step": 116,
+          "action_start": 120,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248699.008574355,
+          "completed_at": 5248699.349271436,
+          "latency_ms": 340.69708082824945
+        },
+        {
+          "observation_step": 124,
+          "action_start": 128,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248702.006584817,
+          "completed_at": 5248702.260672603,
+          "latency_ms": 254.08778619021177
+        },
+        {
+          "observation_step": 132,
+          "action_start": 136,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248705.087531631,
+          "completed_at": 5248705.366493648,
+          "latency_ms": 278.96201703697443
+        },
+        {
+          "observation_step": 140,
+          "action_start": 144,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248708.073893179,
+          "completed_at": 5248708.407207969,
+          "latency_ms": 333.3147894591093
+        },
+        {
+          "observation_step": 148,
+          "action_start": 152,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248711.177867522,
+          "completed_at": 5248711.402664385,
+          "latency_ms": 224.79686234146357
+        },
+        {
+          "observation_step": 156,
+          "action_start": 160,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248714.255164866,
+          "completed_at": 5248714.583730912,
+          "latency_ms": 328.5660455003381
+        },
+        {
+          "observation_step": 164,
+          "action_start": 168,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248717.185981988,
+          "completed_at": 5248717.47539043,
+          "latency_ms": 289.40844163298607
+        },
+        {
+          "observation_step": 172,
+          "action_start": 176,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248720.150492523,
+          "completed_at": 5248720.532136146,
+          "latency_ms": 381.6436231136322
+        },
+        {
+          "observation_step": 180,
+          "action_start": 184,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248723.247615942,
+          "completed_at": 5248723.584491374,
+          "latency_ms": 336.8754321709275
+        },
+        {
+          "observation_step": 188,
+          "action_start": 192,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248726.309327907,
+          "completed_at": 5248726.570803547,
+          "latency_ms": 261.4756403490901
+        },
+        {
+          "observation_step": 196,
+          "action_start": 200,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248729.399604797,
+          "completed_at": 5248729.732517709,
+          "latency_ms": 332.91291166096926
+        },
+        {
+          "observation_step": 204,
+          "action_start": 208,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248732.475249256,
+          "completed_at": 5248732.741773536,
+          "latency_ms": 266.52428042143583
+        },
+        {
+          "observation_step": 212,
+          "action_start": 216,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248735.544114892,
+          "completed_at": 5248735.812463346,
+          "latency_ms": 268.348453566432
+        },
+        {
+          "observation_step": 220,
+          "action_start": 224,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248738.625791617,
+          "completed_at": 5248738.96710985,
+          "latency_ms": 341.31823293864727
+        },
+        {
+          "observation_step": 228,
+          "action_start": 232,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248741.68874764,
+          "completed_at": 5248741.944408362,
+          "latency_ms": 255.66072203218937
+        },
+        {
+          "observation_step": 236,
+          "action_start": 240,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248744.856818703,
+          "completed_at": 5248745.115945445,
+          "latency_ms": 259.12674237042665
+        },
+        {
+          "observation_step": 244,
+          "action_start": 248,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248747.912392592,
+          "completed_at": 5248748.168702715,
+          "latency_ms": 256.3101230189204
+        },
+        {
+          "observation_step": 252,
+          "action_start": 256,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248751.032507904,
+          "completed_at": 5248751.364090918,
+          "latency_ms": 331.5830137580633
+        },
+        {
+          "observation_step": 260,
+          "action_start": 264,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248754.115544328,
+          "completed_at": 5248754.492169671,
+          "latency_ms": 376.62534322589636
+        },
+        {
+          "observation_step": 268,
+          "action_start": 272,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248757.198025301,
+          "completed_at": 5248757.492557639,
+          "latency_ms": 294.5323381572962
+        },
+        {
+          "observation_step": 276,
+          "action_start": 280,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248760.251981813,
+          "completed_at": 5248760.581506338,
+          "latency_ms": 329.52452450990677
+        },
+        {
+          "observation_step": 284,
+          "action_start": 288,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248763.358467207,
+          "completed_at": 5248763.625066224,
+          "latency_ms": 266.599016264081
+        },
+        {
+          "observation_step": 292,
+          "action_start": 296,
+          "observation_timestamp": null,
+          "prefetch_after_steps": 4,
+          "requested_at": 5248766.457414704,
+          "completed_at": 5248766.754159475,
+          "latency_ms": 296.7447703704238
+        }
+      ],
+      "gaps": [
+        {
+          "action_start": 0,
+          "seconds": 0.3520789258182049
+        }
+      ]
+    }
+  ],
+  "strategy": "StarVlaAsyncRollingStrategy",
+  "server": {
+    "env": "starvla_eva_contract_server",
+    "ckpt_path": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt",
+    "action_chunk_size": 8,
+    "available_unnorm_keys": [
+      "franka"
+    ],
+    "default_unnorm_key": "franka",
+    "training_data_mix": "libero_all_rollflow",
+    "training_obs_image_size": [
+      224,
+      224
+    ],
+    "eval_image_contract": "Eval clients must explicitly choose image count and order. The server does not infer or reorder camera views from training config.",
+    "action_keys": [
+      "action.x",
+      "action.y",
+      "action.z",
+      "action.roll",
+      "action.pitch",
+      "action.yaw",
+      "action.gripper"
+    ],
+    "state_keys": [
+      "state.x",
+      "state.y",
+      "state.z",
+      "state.roll",
+      "state.pitch",
+      "state.yaw",
+      "state.pad",
+      "state.gripper"
+    ],
+    "contract_name": "libero_rollflow_h32_c8_k4_async",
+    "contract": {
+      "name": "libero_rollflow_h32_c8_k4_async",
+      "protocol": "starvla_eva_contract_v2",
+      "robot": "libero_franka",
+      "cameras": [
+        {
+          "eva_key": "agentview",
+          "training_key": "video.primary_image"
+        },
+        {
+          "eva_key": "wrist",
+          "training_key": "video.wrist_image"
+        }
+      ],
+      "image": {
+        "hw": [
+          224,
+          224
+        ],
+        "color": "rgb",
+        "resize": "direct",
+        "interpolation": "bilinear",
+        "rotate_180": true
+      },
+      "state": {
+        "include": false,
+        "raw_dim": 0,
+        "fields": []
+      },
+      "action": {
+        "mode": "joint",
+        "semantics": "libero_cartesian_delta",
+        "dim": 7,
+        "chunk_size": 8,
+        "unnorm_key": "franka",
+        "training_keys": [
+          "action.x",
+          "action.y",
+          "action.z",
+          "action.roll",
+          "action.pitch",
+          "action.yaw",
+          "action.gripper"
+        ],
+        "fields": [
+          {
+            "training_key": "action.x",
+            "slice": [
+              0,
+              1
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.y",
+            "slice": [
+              1,
+              2
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.z",
+            "slice": [
+              2,
+              3
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.roll",
+            "slice": [
+              3,
+              4
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.pitch",
+            "slice": [
+              4,
+              5
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.yaw",
+            "slice": [
+              5,
+              6
+            ],
+            "units": "controller_delta"
+          },
+          {
+            "training_key": "action.gripper",
+            "slice": [
+              6,
+              7
+            ],
+            "units": "normalized"
+          }
+        ]
+      },
+      "model": {
+        "framework": "QwenGR00TRollFlow",
+        "horizon": 32,
+        "inference_steps": 4
+      },
+      "inference_kwargs": {},
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 8,
+        "control_hz": 20,
+        "scheduling": "async_prefetch",
+        "prefetch_after_steps": 4,
+        "aggregation": "none"
+      },
+      "eva": {
+        "robot_type": "eva_libero_virtual",
+        "source_color": "rgb",
+        "obs_space": "JointState",
+        "action_space": "JointState",
+        "gripper": {
+          "threshold": 0.5,
+          "open": -1.0,
+          "close": 1.0
+        }
+      }
+    },
+    "contract_sha256": "8a9c6af2135c6d51a19f6447d7c3db600883a78f6dd8c19bf96c72bf5f2b2d88",
+    "stream_policy": "single_connection_with_reset_on_connect_and_disconnect",
+    "capabilities": {
+      "reset": true,
+      "chunk_sequence": true,
+      "trace": true,
+      "execution": {
+        "kind": "rolling",
+        "execute_steps": 8,
+        "control_hz": 20,
+        "scheduling": "async_prefetch",
+        "prefetch_after_steps": 4,
+        "aggregation": "none"
+      }
+    },
+    "runtime_identity": {
+      "checkpoint_file": {
+        "path": "/data/tzq/starVLA_checkpoints/libero_qwengroot_rollflow_h32_c8_b128_unfrozen_463a1f7/checkpoints/steps_55000_pytorch_model.pt",
+        "size_bytes": 2499974667,
+        "mtime_ns": 1788845336429569651
+      },
+      "resolved_training_config_sha256": "20d17b8fa289f7b2cceef73ed0d335cdbb589d90af9ba3c63c9d917a3ddea153",
+      "sources": [
+        {
+          "path": "/data/tzq/starVLA-RollFlow/deployment/model_server/policy_wrapper.py",
+          "sha256": "1acc1d9dd0c4b34a565da530ea8c03ff5800ce4dba1405e08b5dd0d69e263c80"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/examples/simBenchmarks/LIBERO/train_files/data_registry/data_config.py",
+          "sha256": "6fb819757a5d2e039337541d38d00da9f7aa3046785ead142808987d5af4b841"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/framework/VLM4A/QwenGR00TRollFlow.py",
+          "sha256": "d00994a6d92649523c56b4e24d4c2a406632826726802b415c7c56e2b25298ad"
+        },
+        {
+          "path": "/data/tzq/starVLA-RollFlow/starVLA/model/modules/action_model/GR00T_RollFlow_ActionHeader.py",
+          "sha256": "e09b53e0c4ac858450761ea3cabc63c1d540ca7b1f42caa852375987e05c3e24"
+        }
+      ]
+    },
+    "session_id": "67a5a989eedd484d8bb96ed42d66a94c",
+    "protocol": "starvla_eva_contract_v2",
+    "server_name": "starvla-eva-contract",
+    "action_mode": "joint",
+    "action_dim": 7
+  },
+  "suite": "libero_goal",
+  "task_ids": [
+    0,
+    1
+  ],
+  "policy_seed_per_episode": 7,
+  "episodes": [
+    {
+      "task_id": 0,
+      "episode_index": 0,
+      "init_state_id": 0,
+      "task": "open the middle drawer of the cabinet",
+      "success": true,
+      "steps": 141,
+      "chunks": 19,
+      "mean_inference_ms": 374.117258445997,
+      "elapsed_seconds": 51.66174169629812,
+      "complete": true,
+      "video": "work_dirs/eva_validation/deployment_20261014/videos_async/task_0_episode_0.mp4"
+    },
+    {
+      "task_id": 0,
+      "episode_index": 1,
+      "init_state_id": 1,
+      "task": "open the middle drawer of the cabinet",
+      "success": true,
+      "steps": 128,
+      "chunks": 17,
+      "mean_inference_ms": 311.6844235097661,
+      "elapsed_seconds": 45.699005080386996,
+      "complete": true,
+      "video": "work_dirs/eva_validation/deployment_20261014/videos_async/task_0_episode_1.mp4"
+    },
+    {
+      "task_id": 1,
+      "episode_index": 0,
+      "init_state_id": 0,
+      "task": "put the bowl on the stove",
+      "success": true,
+      "steps": 154,
+      "chunks": 20,
+      "mean_inference_ms": 299.2622012272477,
+      "elapsed_seconds": 61.00586409494281,
+      "complete": true,
+      "video": "work_dirs/eva_validation/deployment_20261014/videos_async/task_1_episode_0.mp4"
+    },
+    {
+      "task_id": 1,
+      "episode_index": 1,
+      "init_state_id": 1,
+      "task": "put the bowl on the stove",
+      "success": false,
+      "steps": 300,
+      "chunks": 38,
+      "mean_inference_ms": 302.8975043102707,
+      "elapsed_seconds": 115.0879309438169,
+      "complete": true,
+      "video": "work_dirs/eva_validation/deployment_20261014/videos_async/task_1_episode_1.mp4"
+    }
+  ],
+  "success_rate": 0.75,
+  "mean_inference_ms": 318.1086414731405,
+  "rollout_path": "EVA StarVlaRollingStrategy -> fetch_action_chunk -> gripper/action normalization -> LiberoSimTransport.publish_action -> closed-loop next observation",
+  "trajectory_artifact": "work_dirs/eva_validation/deployment_20261014/libero_async.npz"
+}

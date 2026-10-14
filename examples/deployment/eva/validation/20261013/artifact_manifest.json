@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-13",
+  "tested_from": "working tree; deployment changes not committed at test time",
+  "baseline_commit": "b44e91844f53997833df95f2d97bd6d361109dc5",
+  "physical_robot_actions": false,
+  "g2_actions_published": false,
+  "libero_execution": "local CPU simulation",
+  "model_process_gpu": 3,
+  "model_allocator_limit_gib": 6,
+  "artifacts": [
+    {
+      "path": "g2_comparison.json",
+      "size_bytes": 1004,
+      "sha256": "9b6ff7ba828a63cc06101ba4231c17c7075865658fd346204f05210e2699092a"
+    },
+    {
+      "path": "g2_replay.json",
+      "size_bytes": 45141,
+      "sha256": "09d9009e4f32049e5c189fb402254fc924d8f14d092bb2f359cbdfabb0d2eb4f"
+    },
+    {
+      "path": "g2_replay.npz",
+      "size_bytes": 120209,
+      "sha256": "c0fd5cab6545ca2778de319a6eabf74da6b437d6ca533ded9bc34f638b1c62a7"
+    },
+    {
+      "path": "libero_comparison.json",
+      "size_bytes": 930,
+      "sha256": "b4ee0096f540009e4bdebea12307564d03e469f3a3b2210256553b38596808e8"
+    },
+    {
+      "path": "libero.json",
+      "size_bytes": 7829,
+      "sha256": "3c333a027d86a501cbe17719cfdea071c58866c0ddbecaf66d95f0874b53242c"
+    },
+    {
+      "path": "libero.npz",
+      "size_bytes": 11725,
+      "sha256": "ecf69f01e5af92da678a2c226095b28c4b499dfb6bda7a40bc833530a13eebb5"
+    },
+    {
+      "path": "libero_reference.json",
+      "size_bytes": 704,
+      "sha256": "29090ad49734954b066705ffbead927228610da6e95493f8748445f1a71f1cd6"
+    },
+    {
+      "path": "g2_doctor.json",
+      "size_bytes": 6553,
+      "sha256": "aa522db9844987a76dd06d585ef3517ef1e050c9faa4a10cf3f42d2561eb0a52"
+    },
+    {
+      "path": "libero_doctor.json",
+      "size_bytes": 10072,
+      "sha256": "e1e27dbd5d7d3cf6a49b1642aeb78393396c4f574a88f192f7d01f216a46b01e"
+    },
+    {
+      "path": "eva_source_audit.json",
+      "size_bytes": 151,
+      "sha256": "8b31b8b3003f1628926797cc3d31abc59c283097dc6d4e18500e714177b7dcf1"
+    },
+    {
+      "path": "cpu.xml",
+      "size_bytes": 6104,
+      "sha256": "8ca1d19991aced38820babd40543c0453f49813cdfbabe07b0398d3a7cdd1165"
+    },
+    {
+      "path": "cpu.log.txt",
+      "size_bytes": 99,
+      "sha256": "59ba816fc8a4ed7ac1f026639f9de9db90e8ab554381d15dc72742213203818a"
+    }
+  ],
+  "model_worktree_diff_sha256": "9bad1a5020316e9cb3b04ca600cc08a216f323db358cc842509f7c41a19fb4aa",
+  "model_worktree_note": "Pre-existing local MeanFlow diagnostics were present during LIBERO inference; this deployment migration did not edit them. Tests do not assert exact clean-tag model reproduction."
+}
